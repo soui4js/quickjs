@@ -1,6 +1,6 @@
 #
 # QuickJS Javascript Engine
-# 
+#
 # Copyright (c) 2017-2021 Fabrice Bellard
 # Copyright (c) 2017-2021 Charlie Gordon
 #
@@ -26,9 +26,9 @@ ifeq ($(shell uname -s),Darwin)
 CONFIG_DARWIN=y
 endif
 # Windows cross compilation from Linux
-#CONFIG_WIN32=y
+CONFIG_WIN32=y
 # use link time optimization (smaller and faster executables but slower build)
-CONFIG_LTO=y
+CONFIG_LTO=n
 # consider warnings as errors (for development)
 #CONFIG_WERROR=y
 # force 32 bit build for some utilities
@@ -132,7 +132,8 @@ else
 LDEXPORT=-rdynamic
 endif
 
-PROGS=qjs$(EXE) qjsc$(EXE) run-test262
+# PROGS=qjs$(EXE) qjsc$(EXE) run-test262
+PROGS=qjs-debug$(EXE)
 ifneq ($(CROSS_PREFIX),)
 QJSC_CC=gcc
 QJSC=./host-qjsc
@@ -178,16 +179,19 @@ endif
 
 QJS_OBJS=$(OBJDIR)/qjs.o $(OBJDIR)/repl.o $(QJS_LIB_OBJS)
 ifdef CONFIG_BIGNUM
-QJS_LIB_OBJS+=$(OBJDIR)/libbf.o 
+QJS_LIB_OBJS+=$(OBJDIR)/libbf.o
 QJS_OBJS+=$(OBJDIR)/qjscalc.o
 endif
 
-HOST_LIBS=-lm -ldl -lpthread
+# HOST_LIBS=-lm -ldl -lpthread
+HOST_LIBS=-lm -lws2_32 -lpthread
 LIBS=-lm
 ifndef CONFIG_WIN32
-LIBS+=-ldl -lpthread
+# LIBS+=-ldl -lpthread
+LIBS+=-lws2_32 -lpthread
 endif
 LIBS+=$(EXTRA_LIBS)
+LIBS+=-lws2_32
 
 $(OBJDIR):
 	mkdir -p $(OBJDIR) $(OBJDIR)/examples $(OBJDIR)/tests
@@ -366,11 +370,11 @@ examples/point.so: $(OBJDIR)/examples/point.pic.o
 ###############################################################################
 # documentation
 
-DOCS=doc/quickjs.pdf doc/quickjs.html doc/jsbignum.pdf doc/jsbignum.html 
+DOCS=doc/quickjs.pdf doc/quickjs.html doc/jsbignum.pdf doc/jsbignum.html
 
 build_doc: $(DOCS)
 
-clean_doc: 
+clean_doc:
 	rm -f $(DOCS)
 
 doc/%.pdf: doc/%.texi
