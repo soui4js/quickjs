@@ -391,6 +391,12 @@ static void js_process_request(JSDebuggerInfo *info, struct DebuggerSuspendedSta
     JS_FreeValue(ctx, request);
 }
 
+static void str_to_lower(char *str) {
+  for (int i = 0; str[i]; i++) {
+    str[i] = tolower(str[i]);
+  }
+}
+
 static void js_process_breakpoints(JSDebuggerInfo *info, JSValue message) {
     JSContext *ctx = info->ctx;
 
@@ -399,16 +405,21 @@ static void js_process_breakpoints(JSDebuggerInfo *info, JSValue message) {
 
     JSValue path_property = JS_GetPropertyStr(ctx, message, "path");
     const char *path = JS_ToCString(ctx, path_property);
-    JSValue path_data = JS_GetPropertyStr(ctx, info->breakpoints, path);
+    // path str_to_lower
+    char *lower_path = strdup(path);
+    str_to_lower(lower_path);
+
+    JSValue path_data = JS_GetPropertyStr(ctx, info->breakpoints, lower_path);
 
     if (!JS_IsUndefined(path_data))
         JS_FreeValue(ctx, path_data);
     // use an object to store the breakpoints as a sparse array, basically.
     // this will get resolved into a pc array mirror when its detected as dirty.
     path_data = JS_NewObject(ctx);
-    JS_SetPropertyStr(ctx, info->breakpoints, path, path_data);
+    JS_SetPropertyStr(ctx, info->breakpoints, lower_path, path_data);
     JS_FreeCString(ctx, path);
     JS_FreeValue(ctx, path_property);
+    free(lower_path);
 
     JSValue breakpoints = JS_GetPropertyStr(ctx, message, "breakpoints");
     JS_SetPropertyStr(ctx, path_data, "breakpoints", breakpoints);
@@ -417,9 +428,12 @@ static void js_process_breakpoints(JSDebuggerInfo *info, JSValue message) {
     JS_FreeValue(ctx, message);
 }
 
-JSValue js_debugger_file_breakpoints(JSContext *ctx, const char* path) {
+JSValue js_debugger_file_breakpoints(JSContext *ctx, const char *path) {
+    char *lower_path = strdup(path);
+    str_to_lower(lower_path);
     JSDebuggerInfo *info = js_debugger_info(JS_GetRuntime(ctx));
-    JSValue path_data = JS_GetPropertyStr(ctx, info->breakpoints, path);
+    JSValue path_data = JS_GetPropertyStr(ctx, info->breakpoints, lower_path);
+    free(lower_path);
     return path_data;
 }
 
@@ -471,9 +485,7 @@ static int js_process_debugger_messages(JSDebuggerInfo *info, const uint8_t *cur
             // done_processing = 1;
         }
         else if (strcmp("continue", type) == 0) {
-            // info->is_paused = 0;
-            info->is_paused = 1;
-            js_send_stopped_event(info, "pause");
+            info->is_paused = 0;
         }
         else if (strcmp("breakpoints", type) == 0) {
             js_process_breakpoints(info, JS_GetPropertyStr(ctx, message, "breakpoints"));
