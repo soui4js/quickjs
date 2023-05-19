@@ -32,7 +32,7 @@ CONFIG_LTO=n
 # consider warnings as errors (for development)
 #CONFIG_WERROR=y
 # force 32 bit build for some utilities
-#CONFIG_M32=y
+CONFIG_M32=y
 
 ifdef CONFIG_DARWIN
 # use clang instead of gcc
@@ -133,7 +133,7 @@ LDEXPORT=-rdynamic
 endif
 
 # PROGS=qjs$(EXE) qjsc$(EXE) run-test262
-PROGS=qjs-debug$(EXE)
+PROGS=qjs-debug$(EXE) 
 ifneq ($(CROSS_PREFIX),)
 QJSC_CC=gcc
 QJSC=./host-qjsc
@@ -144,9 +144,6 @@ QJSC=./qjsc$(EXE)
 endif
 ifndef CONFIG_WIN32
 PROGS+=qjscalc
-endif
-ifdef CONFIG_M32
-PROGS+=qjs32 qjs32_s
 endif
 PROGS+=libquickjs.a
 ifdef CONFIG_LTO
@@ -183,15 +180,10 @@ QJS_LIB_OBJS+=$(OBJDIR)/libbf.o
 QJS_OBJS+=$(OBJDIR)/qjscalc.o
 endif
 
-# HOST_LIBS=-lm -ldl -lpthread
-HOST_LIBS=-lm -lws2_32 -lpthread
-LIBS=-lm
-ifndef CONFIG_WIN32
-# LIBS+=-ldl -lpthread
-LIBS+=-lws2_32 -lpthread
-endif
+HOST_LIBS=-lm -Wl,-Bstatic -lpthread -Wl,-Bdynamic -lws2_32
+LIBS=-lm -Wl,-Bstatic -lpthread -Wl,-Bdynamic -lws2_32
+
 LIBS+=$(EXTRA_LIBS)
-LIBS+=-lws2_32
 
 $(OBJDIR):
 	mkdir -p $(OBJDIR) $(OBJDIR)/examples $(OBJDIR)/tests
@@ -224,10 +216,6 @@ $(OBJDIR)/qjsc.host.o: CFLAGS+=$(QJSC_HOST_DEFINES)
 
 qjs32: $(patsubst %.o, %.m32.o, $(QJS_OBJS))
 	$(CC) -m32 $(LDFLAGS) $(LDEXPORT) -o $@ $^ $(LIBS)
-
-qjs32_s: $(patsubst %.o, %.m32s.o, $(QJS_OBJS))
-	$(CC) -m32 $(LDFLAGS) -o $@ $^ $(LIBS)
-	@size $@
 
 qjscalc: qjs
 	ln -sf $< $@

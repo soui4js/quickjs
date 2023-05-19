@@ -288,6 +288,7 @@ struct JSRuntime {
 
     JSModuleNormalizeFunc *module_normalize_func;
     JSModuleLoaderFunc *module_loader_func;
+    JSModuleUnloaderFunc* module_unloader_func;
     void *module_loader_opaque;
 
     BOOL can_block : 8; /* TRUE if Atomics.wait can block */
@@ -809,6 +810,7 @@ struct JSModuleDef {
     BOOL eval_has_exception : 8; 
     JSValue eval_exception;
     JSValue meta_obj; /* for import.meta */
+    void* so_handle; /* for import so */
 };
 
 typedef struct JSJobEntry {
@@ -7446,7 +7448,7 @@ static int num_keys_cmp(const void *p1, const void *p2, void *opaque)
         return 1;
 }
 
-static void js_free_prop_enum(JSContext *ctx, JSPropertyEnum *tab, uint32_t len)
+void js_free_prop_enum(JSContext *ctx, JSPropertyEnum *tab, uint32_t len)
 {
     uint32_t i;
     if (tab) {
@@ -10839,6 +10841,7 @@ static int JS_ToInt64Free(JSContext *ctx, int64_t *pres, JSValue val)
         }
         break;
 #ifdef CONFIG_BIGNUM
+    case JS_TAG_BIG_INT:
     case JS_TAG_BIG_FLOAT:
         {
             JSBigFloat *p = JS_VALUE_GET_PTR(val);
@@ -10914,6 +10917,7 @@ static int JS_ToInt32Free(JSContext *ctx, int32_t *pres, JSValue val)
         }
         break;
 #ifdef CONFIG_BIGNUM
+    case JS_TAG_BIG_INT:
     case JS_TAG_BIG_FLOAT:
         {
             JSBigFloat *p = JS_VALUE_GET_PTR(val);
@@ -11991,6 +11995,17 @@ int JS_IsArray(JSContext *ctx, JSValueConst val)
     } else {
         return FALSE;
     }
+}
+
+JSClassID JS_GetClassID(JSValueConst v)
+{
+    JSObject *p;
+
+    if (JS_VALUE_GET_TAG(v) != JS_TAG_OBJECT)
+        return 0;
+    p = JS_VALUE_GET_OBJ(v);
+    assert(p != 0);
+    return p->class_id;
 }
 
 static double js_pow(double a, double b)
@@ -21672,7 +21687,7 @@ static int cpool_add(JSParseState *s, JSValue val)
     return fd->cpool_count - 1;
 }
 
-static __exception int emit_push_const(JSParseState *s, JSValueConst val,
+static int emit_push_const(JSParseState *s, JSValueConst val,
                                        BOOL as_atom)
 {
     int idx;
@@ -27069,6 +27084,7 @@ static JSModuleDef *js_new_module_def(JSContext *ctx, JSAtom name)
     m->func_obj = JS_UNDEFINED;
     m->eval_exception = JS_UNDEFINED;
     m->meta_obj = JS_UNDEFINED;
+    m->so_handle = NULL;
     list_add_tail(&m->link, &ctx->loaded_modules);
     return m;
 }
@@ -27095,6 +27111,7 @@ static void js_mark_module_def(JSRuntime *rt, JSModuleDef *m,
 static void js_free_module_def(JSContext *ctx, JSModuleDef *m)
 {
     int i;
+    JSRuntime* rt = ctx->rt;
 
     JS_FreeAtom(ctx, m->module_name);
 
@@ -27125,6 +27142,10 @@ static void js_free_module_def(JSContext *ctx, JSModuleDef *m)
     JS_FreeValue(ctx, m->func_obj);
     JS_FreeValue(ctx, m->eval_exception);
     JS_FreeValue(ctx, m->meta_obj);
+
+    if (rt->module_unloader_func) {
+        rt->module_unloader_func(ctx, m->so_handle);
+    }
     list_del(&m->link);
     js_free(ctx, m);
 }
@@ -27250,6 +27271,11 @@ int JS_AddModuleExport(JSContext *ctx, JSModuleDef *m, const char *export_name)
         return 0;
 }
 
+void JS_SetModuleHandle(JSModuleDef* m, void* so_handle) {
+    assert(m->so_handle == NULL);
+    m->so_handle = so_handle;
+}
+
 int JS_SetModuleExport(JSContext *ctx, JSModuleDef *m, const char *export_name,
                        JSValue val)
 {
@@ -27271,10 +27297,13 @@ int JS_SetModuleExport(JSContext *ctx, JSModuleDef *m, const char *export_name,
 
 void JS_SetModuleLoaderFunc(JSRuntime *rt,
                             JSModuleNormalizeFunc *module_normalize,
-                            JSModuleLoaderFunc *module_loader, void *opaque)
+                            JSModuleLoaderFunc *module_loader,
+                            JSModuleUnloaderFunc* module_unloader,
+                            void *opaque)
 {
     rt->module_normalize_func = module_normalize;
     rt->module_loader_func = module_loader;
+    rt->module_unloader_func = module_unloader;
     rt->module_loader_opaque = opaque;
 }
 
@@ -27285,24 +27314,28 @@ static char *js_default_module_normalize_name(JSContext *ctx,
 {
     char *filename, *p;
     const char *r;
-    int len;
+    int len,i;
 
     if (name[0] != '.') {
         /* if no initial dot, the module name is not modified */
         return js_strdup(ctx, name);
     }
-
-    p = strrchr(base_name, '/');
-    if (p)
-        len = p - base_name;
-    else
-        len = 0;
-
+    len = strlen(base_name);
     filename = js_malloc(ctx, len + strlen(name) + 1 + 1);
     if (!filename)
         return NULL;
     memcpy(filename, base_name, len);
-    filename[len] = '\0';
+    filename[len] = 0;
+    for(i=0;i<len;i++){
+        if(filename[i]=='\\')
+            filename[i]='/';
+    }
+    p = strrchr(filename, '/');
+
+    if (p) 
+        *p='\0';
+    else
+        filename[0]='\0';
 
     /* we only normalize the leading '..' or '.' */
     r = name;
@@ -54486,4 +54519,43 @@ JSValue js_debugger_evaluate(JSContext *ctx, int stack_index, JSValue expression
         return ret;
     }
     return JS_UNDEFINED;
+}
+
+JSValue JS_DupValue(JSContext *ctx, JSValueConst v)
+{
+    if (JS_VALUE_HAS_REF_COUNT(v)) {
+        JSRefCountHeader *p = (JSRefCountHeader *)JS_VALUE_GET_PTR(v);
+        p->ref_count++;
+    }
+    return (JSValue)v;
+}
+
+JSValue JS_DupValueRT(JSRuntime *rt, JSValueConst v)
+{
+    if (JS_VALUE_HAS_REF_COUNT(v)) {
+        JSRefCountHeader *p = (JSRefCountHeader *)JS_VALUE_GET_PTR(v);
+        p->ref_count++;
+    }
+    return (JSValue)v;
+}
+
+void __JS_FreeValue(JSContext *ctx, JSValue v);
+void JS_FreeValue(JSContext *ctx, JSValue v)
+{
+    if (JS_VALUE_HAS_REF_COUNT(v)) {
+        JSRefCountHeader *p = (JSRefCountHeader *)JS_VALUE_GET_PTR(v);
+        if (--p->ref_count <= 0) {
+            __JS_FreeValue(ctx, v);
+        }
+    }
+}
+void __JS_FreeValueRT(JSRuntime *rt, JSValue v);
+void JS_FreeValueRT(JSRuntime *rt, JSValue v)
+{
+    if (JS_VALUE_HAS_REF_COUNT(v)) {
+        JSRefCountHeader *p = (JSRefCountHeader *)JS_VALUE_GET_PTR(v);
+        if (--p->ref_count <= 0) {
+            __JS_FreeValueRT(rt, v);
+        }
+    }
 }

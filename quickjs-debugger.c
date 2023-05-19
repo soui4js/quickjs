@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#include <ctype.h>
 
 typedef struct DebuggerSuspendedState {
     uint32_t variable_reference_count;
@@ -203,16 +204,6 @@ static void js_send_stopped_event(JSDebuggerInfo *info, const char *reason) {
     int64_t id = (int64_t)info->ctx;
     JS_SetPropertyStr(ctx, event, "thread", JS_NewInt64(ctx, id));
     js_transport_send_event(info, event);
-}
-
-static void js_free_prop_enum(JSContext *ctx, JSPropertyEnum *tab, uint32_t len)
-{
-    uint32_t i;
-    if (tab) {
-        for(i = 0; i < len; i++)
-            JS_FreeAtom(ctx, tab[i].atom);
-        js_free(ctx, tab);
-    }
 }
 
 static uint32_t js_get_property_as_uint32(JSContext *ctx, JSValue obj, const char* property) {

@@ -47,6 +47,7 @@ function test_worker()
                 let buf = ev.buf;
                 /* check that the SharedArrayBuffer was modified */
                 assert(buf[2], 10);
+                console.log("worker done");
                 worker.postMessage({ type: "abort" });
             }
             break;

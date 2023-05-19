@@ -1521,7 +1521,7 @@ int run_test_buf(const char *filename, char *harness, namelist_t *ip,
     JS_SetCanBlock(rt, can_block);
     
     /* loader for ES6 modules */
-    JS_SetModuleLoaderFunc(rt, NULL, js_module_loader_test, NULL);
+    JS_SetModuleLoaderFunc(rt, NULL, js_module_loader_test, NULL,NULL);
         
     add_helpers(ctx);
 
@@ -1818,7 +1818,7 @@ int run_test262_harness_test(const char *filename, BOOL is_module)
     JS_SetCanBlock(rt, can_block);
     
     /* loader for ES6 modules */
-    JS_SetModuleLoaderFunc(rt, NULL, js_module_loader_test, NULL);
+    JS_SetModuleLoaderFunc(rt, NULL, js_module_loader_test, NULL,NULL);
         
     add_helpers(ctx);
 
