@@ -557,7 +557,10 @@ void js_debugger_check(JSContext* ctx, const uint8_t *cur_pc) {
         info->attempted_connect = 1;
         char *address = getenv("QUICKJS_DEBUG_ADDRESS");
         if (address != NULL && !info->transport_close)
-            js_debugger_connect(ctx, address);
+        {
+            if(0!=js_debugger_connect(ctx, address))
+                goto done;
+        }    
     }
     else if (!info->attempted_wait) {
         info->attempted_wait = 1;

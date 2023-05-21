@@ -19,6 +19,8 @@
         "system_error": "c",
         "tuple": "c",
         "type_traits": "c",
-        "vector": "c"
-    }
+        "vector": "c",
+        "compare": "c"
+    },
+    "C_Cpp.errorSquiggles": "disabled"
 }

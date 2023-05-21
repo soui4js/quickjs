@@ -91,8 +91,6 @@ static void js_transport_close(JSRuntime* rt, void *udata) {
 	data->handle = 0;
 
     free(udata);
-
-	WSACleanup();
 }
 
 // todo: fixup asserts to return errors.
@@ -119,11 +117,9 @@ static struct sockaddr_in js_debugger_parse_sockaddr(const char* address) {
     return addr;
 }
 
-void js_debugger_connect(JSContext *ctx, const char *address) {
+int js_debugger_connect(JSContext *ctx, const char *address) {
 
-	WSADATA wsaData;
-	WSAStartup(MAKEWORD(2, 2), &wsaData);
-
+    int ret = 0;
     char* port_string = strstr(address, ":");
     assert(port_string);
 
@@ -144,13 +140,15 @@ void js_debugger_connect(JSContext *ctx, const char *address) {
     addr.sin_family = AF_INET;
     memcpy((char *)&addr.sin_addr.s_addr, (char *)host->h_addr, host->h_length);
     addr.sin_port = htons(port);
-
-	//__asm__ volatile("int $0x03");
-	assert(!connect(client, (const struct sockaddr *)&addr, sizeof(addr)));
-
-    struct js_transport_data *data = (struct js_transport_data *)malloc(sizeof(struct js_transport_data));
-    data->handle = client;
-    js_debugger_attach(ctx, js_transport_read, js_transport_write, js_transport_peek, js_transport_close, data);
+    ret = connect(client, (const struct sockaddr *)&addr, sizeof(addr));
+    if(ret == 0){
+        struct js_transport_data *data = (struct js_transport_data *)malloc(sizeof(struct js_transport_data));
+        data->handle = client;
+        js_debugger_attach(ctx, js_transport_read, js_transport_write, js_transport_peek, js_transport_close, data);
+    }else{
+        printf("connect ret:%d,err:%u\n",ret,GetLastError());
+    }
+    return ret;
 }
 
 void js_debugger_wait_connection(JSContext *ctx, const char* address) {

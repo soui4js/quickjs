@@ -114,18 +114,20 @@ static struct sockaddr_in js_debugger_parse_sockaddr(const char* address) {
     return addr;
 }
 
-void js_debugger_connect(JSContext *ctx, const char *address) {
+int js_debugger_connect(JSContext *ctx, const char *address) {
+    int ret = 0;
     struct sockaddr_in addr = js_debugger_parse_sockaddr(address);
 
     int client = socket(AF_INET, SOCK_STREAM, 0);
     assert(client > 0);
 
-    assert(!connect(client, (const struct sockaddr *)&addr, sizeof(addr)));
-
+    ret = connect(client, (const struct sockaddr *)&addr, sizeof(addr));
+    assert(ret==0);
     struct js_transport_data *data = (struct js_transport_data *)malloc(sizeof(struct js_transport_data));
     memset(data, 0, sizeof(js_transport_data));
     data->handle = client;
     js_debugger_attach(ctx, js_transport_read, js_transport_write, js_transport_peek, js_transport_close, data);
+    return ret;
 }
 
 void js_debugger_wait_connection(JSContext *ctx, const char* address) {

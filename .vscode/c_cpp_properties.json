@@ -17,7 +17,7 @@
             "forcedInclude": [
                 "${workspaceFolder}/include/config.h"
             ],
-            "compilerPath": "/usr/bin/clang",
+            "compilerPath": "D:/msys64/mingw64/bin/gcc.exe",
             "cStandard": "c11",
             "cppStandard": "c++17",
             "compileCommands": "/path/to/compile_commands.json",

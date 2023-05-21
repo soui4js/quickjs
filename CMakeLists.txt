@@ -66,7 +66,7 @@ set(
 )
 
 add_executable(qjs ${QJS_SOURCE})
-target_link_libraries(qjs quickjs)
+target_link_libraries(qjs quickjs ws2_32)
 target_compile_definitions(qjs PRIVATE
 	CONFIG_BIGNUM
     CONFIG_VERSION="${QJS_VERSION_STR}"

@@ -69,7 +69,7 @@ void js_debugger_attach(
     void (*transport_close)(JSRuntime* rt, void *udata),
     void *udata
 );
-void js_debugger_connect(JSContext *ctx, const char *address);
+int js_debugger_connect(JSContext *ctx, const char *address);
 void js_debugger_wait_connection(JSContext *ctx, const char* address);
 int js_debugger_is_transport_connected(JSRuntime* rt);
 

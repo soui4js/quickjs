@@ -40,7 +40,9 @@
 
 #include "cutils.h"
 #include "quickjs-libc.h"
-
+#ifdef _WIN32
+#include <winsock2.h>
+#endif
 extern const uint8_t qjsc_repl[];
 extern const uint32_t qjsc_repl_size;
 #ifdef CONFIG_BIGNUM
@@ -479,6 +481,10 @@ int main(int argc, char **argv)
         exit(2);
     }
 
+#ifdef _WIN32
+	WSADATA wsaData;
+	WSAStartup(MAKEWORD(2, 2), &wsaData);
+#endif
     /* loader for ES6 modules */
     JS_SetModuleLoaderFunc(rt, NULL, js_module_loader, js_module_unloader,NULL);
 
@@ -561,8 +567,15 @@ int main(int argc, char **argv)
                best[1] + best[2] + best[3] + best[4],
                best[1], best[2], best[3], best[4]);
     }
+
+#ifdef _WIN32
+	WSACleanup();
+#endif
     return 0;
  fail:
+ #ifdef _WIN32
+	WSACleanup();
+#endif
     js_std_free_handlers(rt);
     JS_FreeContext(ctx);
     JS_FreeRuntime(rt);
