@@ -54,7 +54,6 @@ target_compile_definitions(qjsc PRIVATE
 )
 
 add_custom_target(gen_repl_calc
-OUTPUT  qjscalc.c repl.c 
 COMMAND ${CMAKE_BINARY_DIR}/qjsc.exe -fbignum -c -o qjscalc.c qjscalc.js
 COMMAND ${CMAKE_BINARY_DIR}/qjsc.exe -c -o repl.c -m repl.js
 WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
