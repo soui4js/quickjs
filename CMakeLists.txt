@@ -2,7 +2,10 @@ cmake_minimum_required(VERSION 3.0)
 
 project(libquickjs)
 
+#set(CMAKE_MAKE_PROGRAM D:/msys64/usr/bin/make).
 set(CMAKE_CXX_COMPILE_FEATURES "${CMAKE_CXX_COMPILE_FEATURES} /MT /GR- /utf-8")
+#enable debug
+#set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g -O0")
 
 file(STRINGS "VERSION" QJS_VERSION_STR)
 
@@ -50,12 +53,12 @@ target_compile_definitions(qjsc PRIVATE
     CONFIG_VERSION="${QJS_VERSION_STR}"
 )
 
-#add_custom_target(gen_repl_calc 
-#COMMAND ${CMAKE_BINARY_DIR}/qjsc.exe -fbignum -c -o qjscalc.c qjscalc.js
-#COMMAND ${CMAKE_BINARY_DIR}/qjsc.exe -fbignum -c -o repl.c repl.js
-#WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-#DEPENDS qjsc
-#)
+add_custom_target(gen_repl_calc 
+COMMAND ${CMAKE_BINARY_DIR}/qjsc.exe -fbignum -c -o qjscalc.c qjscalc.js
+COMMAND ${CMAKE_BINARY_DIR}/qjsc.exe -c -o repl.c -m repl.js
+WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+DEPENDS qjsc
+)
 
 # build qjs program
 set(
@@ -71,4 +74,4 @@ target_compile_definitions(qjs PRIVATE
 	CONFIG_BIGNUM
     CONFIG_VERSION="${QJS_VERSION_STR}"
 )
-#add_dependencies(qjs gen_repl_calc)
+add_dependencies(qjs gen_repl_calc)
