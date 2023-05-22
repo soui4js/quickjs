@@ -9,7 +9,7 @@ set(CMAKE_CXX_COMPILE_FEATURES "${CMAKE_CXX_COMPILE_FEATURES} /MT /GR- /utf-8")
 
 file(STRINGS "VERSION" QJS_VERSION_STR)
 
-add_definitions(-DUNICODE -D_UNICODE -DQJS_DLL)
+add_definitions(-DUNICODE -D_UNICODE -DQJS_DLL -DWINVER=0x0501 -D_WIN32_WINNT=0x0501)
 
 include_directories(.)
 
@@ -53,7 +53,8 @@ target_compile_definitions(qjsc PRIVATE
     CONFIG_VERSION="${QJS_VERSION_STR}"
 )
 
-add_custom_target(gen_repl_calc 
+add_custom_target(gen_repl_calc
+OUTPUT  qjscalc.c repl.c 
 COMMAND ${CMAKE_BINARY_DIR}/qjsc.exe -fbignum -c -o qjscalc.c qjscalc.js
 COMMAND ${CMAKE_BINARY_DIR}/qjsc.exe -c -o repl.c -m repl.js
 WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}

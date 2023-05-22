@@ -104,7 +104,7 @@ ifdef CONFIG_BIGNUM
 DEFINES+=-DCONFIG_BIGNUM
 endif
 ifdef CONFIG_WIN32
-DEFINES+=-D__USE_MINGW_ANSI_STDIO # for standard snprintf behavior
+DEFINES+=-D__USE_MINGW_ANSI_STDIO -DWINVER=0x0501 -D_WIN32_WINNT=0x0501 # for standard snprintf behavior
 endif
 
 CFLAGS+=$(DEFINES)

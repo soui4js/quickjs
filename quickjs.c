@@ -22,7 +22,6 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
-#include "config.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdarg.h>
@@ -32888,21 +32887,12 @@ static __exception int js_parse_directives(JSParseState *s)
         }
         if (!has_semi)
             break;
-#if defined(DUMP_BYTECODE)
-        printf("DUMP_BYTECODE=%d\n",DUMP_BYTECODE);
-#endif
         if (!strcmp(str, "use strict")) {
             s->cur_func->has_use_strict = TRUE;
             s->cur_func->js_mode |= JS_MODE_STRICT;
         }
-#if !defined(DUMP_BYTECODE)
+#if !defined(DUMP_BYTECODE) || !(DUMP_BYTECODE & 8)
         else if (!strcmp(str, "use strip")) {
-            printf("!defined(DUMP_BYTECODE)\n");
-            s->cur_func->js_mode |= JS_MODE_STRIP;
-        }
-#elif !(DUMP_BYTECODE & 8)
-        else if (!strcmp(str, "use strip")) {
-            printf("!(DUMP_BYTECODE & 8)\n");
             s->cur_func->js_mode |= JS_MODE_STRIP;
         }
 #endif
