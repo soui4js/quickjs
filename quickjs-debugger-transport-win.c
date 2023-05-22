@@ -59,13 +59,22 @@ static size_t js_transport_write(void *udata, const char *buffer, size_t length)
 }
 
 static size_t js_transport_peek(void *udata) {
-    WSAPOLLFD  fds[1];
-    int poll_rc;
-
     struct js_transport_data* data = (struct js_transport_data *)udata;
     if (data->handle <= 0)
         return -1;
-
+    fd_set read_fds={0};
+    FD_SET(data->handle,&read_fds);
+    TIMEVAL time_out={0,0};
+    int ret = select(1,&read_fds,NULL,NULL,&time_out);
+    if(ret==0)
+        return 0;//time out. no data
+    else if(ret == SOCKET_ERROR)
+        return -2;
+    else
+        return 1;
+    /*
+    WSAPOLLFD  fds[1];
+    int poll_rc;
     fds[0].fd = data->handle;
     fds[0].events = POLLIN;
     fds[0].revents = 0;
@@ -78,8 +87,9 @@ static size_t js_transport_peek(void *udata) {
     // no data
     if (poll_rc == 0)
         return 0;
-    // has data
+    // has data    
     return 1;
+    */
 }
 
 static void js_transport_close(JSRuntime* rt, void *udata) {
@@ -146,7 +156,7 @@ int js_debugger_connect(JSContext *ctx, const char *address) {
         data->handle = client;
         js_debugger_attach(ctx, js_transport_read, js_transport_write, js_transport_peek, js_transport_close, data);
     }else{
-        printf("connect ret:%d,err:%u\n",ret,GetLastError());
+        printf("connect ret:%d,err:%d\n",ret,(int)GetLastError());
     }
     return ret;
 }
