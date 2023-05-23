@@ -3,9 +3,12 @@ cmake_minimum_required(VERSION 3.0)
 project(libquickjs)
 
 #set(CMAKE_MAKE_PROGRAM D:/msys64/usr/bin/make).
+set(CMAKE_MAKE_PROGRAM /mingw32/bin/ninja.exe -j4)
 set(CMAKE_CXX_COMPILE_FEATURES "${CMAKE_CXX_COMPILE_FEATURES} /MT /GR- /utf-8")
 #enable debug
 #set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g -O0")
+#set output small size
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Os")
 
 file(STRINGS "VERSION" QJS_VERSION_STR)
 
