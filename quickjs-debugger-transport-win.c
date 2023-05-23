@@ -92,15 +92,17 @@ static size_t js_transport_peek(void *udata) {
     */
 }
 
+static BOOL s_isConnected = 0;
 static void js_transport_close(JSRuntime* rt, void *udata) {
     struct js_transport_data* data = (struct js_transport_data *)udata;
     if (data->handle <= 0)
         return;
 
+    printf("js_transport_close,tid=%d,socket=%d\n",(int)GetCurrentThreadId(),data->handle);
     close(data->handle);
 	data->handle = 0;
-
     free(udata);
+    s_isConnected = 0;
 }
 
 // todo: fixup asserts to return errors.
@@ -129,7 +131,9 @@ static struct sockaddr_in js_debugger_parse_sockaddr(const char* address) {
 
 int js_debugger_connect(JSContext *ctx, const char *address) {
 
-    int ret = 0;
+    int ret = -1;
+    if(s_isConnected)
+        return ret;
     char* port_string = strstr(address, ":");
     assert(port_string);
 
@@ -151,12 +155,13 @@ int js_debugger_connect(JSContext *ctx, const char *address) {
     memcpy((char *)&addr.sin_addr.s_addr, (char *)host->h_addr, host->h_length);
     addr.sin_port = htons(port);
     ret = connect(client, (const struct sockaddr *)&addr, sizeof(addr));
+    printf("connect ret:%d,err:%d tid=%d\n",ret,(int)GetLastError(),GetCurrentThreadId());
+    
     if(ret == 0){
         struct js_transport_data *data = (struct js_transport_data *)malloc(sizeof(struct js_transport_data));
         data->handle = client;
+        s_isConnected = 1;
         js_debugger_attach(ctx, js_transport_read, js_transport_write, js_transport_peek, js_transport_close, data);
-    }else{
-        printf("connect ret:%d,err:%d\n",ret,(int)GetLastError());
     }
     return ret;
 }
