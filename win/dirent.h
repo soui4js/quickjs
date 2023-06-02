@@ -676,6 +676,45 @@ dirent_next(
     return p;
 }
 
+static int mkdir_r(const char * dirname){
+        int error;
+        wchar_t wname[PATH_MAX + 1];
+        size_t n;
+
+        /* Convert directory name to wide-character string */
+        error = dirent_mbstowcs_s(
+            &n, wname, PATH_MAX + 1, dirname, PATH_MAX + 1);
+        if (error) {
+            /*
+             * Cannot convert file name to wide-character string.  This
+             * occurs if the string contains invalid multi-byte sequences or
+             * the output buffer is too small to contain the resulting
+             * string.
+             */
+            return error;
+        }
+        return _wmkdir(wname);
+}
+
+static FILE* fopen_r(const char * filanem,const char *mode){
+    int error;
+    wchar_t wname[PATH_MAX + 1],wmode[20];
+    size_t n;
+
+        /* Convert directory name to wide-character string */
+        error = dirent_mbstowcs_s(
+            &n, wname, PATH_MAX + 1, filanem, PATH_MAX + 1);
+        if (error) {
+            return NULL;
+        }
+         error = dirent_mbstowcs_s(
+            &n, wmode, 20, mode, 20);
+        if (error) {
+            return NULL;
+        }
+        return _wfopen(wname,wmode);
+}
+
 /*
  * Open directory stream using plain old C-string.
  */
@@ -1047,44 +1086,9 @@ dirent_mbstowcs_s(
     size_t count)
 {
     int error;
-
-#if defined(_MSC_VER)  &&  _MSC_VER >= 1400
     int nCopy = MultiByteToWideChar(CP_UTF8, 0, mbstr, -1, wcstr, sizeInWords);
     if (*pReturnValue) *pReturnValue = nCopy;
     error = nCopy<0?nCopy:0;
-#else
-
-    /* Older Visual Studio or non-Microsoft compiler */
-    size_t n;
-
-    /* Convert to wide-character string (or count characters) */
-    n = mbstowcs (wcstr, mbstr, sizeInWords);
-    if (!wcstr  ||  n < count) {
-
-        /* Zero-terminate output buffer */
-        if (wcstr  &&  sizeInWords) {
-            if (n >= sizeInWords) {
-                n = sizeInWords - 1;
-            }
-            wcstr[n] = 0;
-        }
-
-        /* Length of resulting multi-byte string WITH zero terminator */
-        if (pReturnValue) {
-            *pReturnValue = n + 1;
-        }
-
-        /* Success */
-        error = 0;
-
-    } else {
-
-        /* Could not convert string */
-        error = 1;
-
-    }
-
-#endif
     return error;
 }
 

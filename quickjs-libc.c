@@ -36,12 +36,14 @@
 #include <signal.h>
 #include <limits.h>
 #include <sys/stat.h>
-#include <dirent.h>
+
 #if defined(_WIN32)
+#include "win/dirent.h"
 #include <windows.h>
 #include <conio.h>
 #include <utime.h>
 #else
+#include <dirent.h>
 #include <dlfcn.h>
 #include <termios.h>
 #include <sys/ioctl.h>
@@ -937,7 +939,12 @@ static JSValue js_std_open(JSContext *ctx, JSValueConst this_val,
         goto fail;
     }
 
+#ifdef _WIN32
+    f = fopen_r(filename, mode);
+#else
     f = fopen(filename, mode);
+#endif
+
     if (!f)
         err = errno;
     else
@@ -2609,7 +2616,7 @@ static JSValue js_os_mkdir(JSContext *ctx, JSValueConst this_val,
         return JS_EXCEPTION;
 #if defined(_WIN32)
     (void)mode;
-    ret = js_get_errno(mkdir(path));
+    ret = js_get_errno(mkdir_r(path));
 #else
     ret = js_get_errno(mkdir(path, mode));
 #endif
