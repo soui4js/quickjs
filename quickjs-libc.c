@@ -372,7 +372,7 @@ uint8_t *js_load_file(JSContext *ctx, size_t *pbuf_len, const char *filename)
     size_t buf_len;
     long lret;
     
-    f = fopen(filename, "rb");
+    f = fopen_r(filename, "rb");
     if (!f)
         return NULL;
     if (fseek(f, 0, SEEK_END) < 0)
@@ -467,8 +467,9 @@ void JS_SetModuleHandle(JSModuleDef* m, void* so_handle);
 static JSModuleDef *js_module_loader_so(JSContext *ctx,
                                         const char *module_name)
 {
-	//todo:hjx
-    HMODULE hd = LoadLibraryA(module_name);
+    wchar_t wModName[MAX_PATH] = { 0 };
+    MultiByteToWideChar(CP_UTF8, 0, module_name, -1, wModName, MAX_PATH);
+    HMODULE hd = LoadLibraryW(wModName);
     if (hd == NULL) {
         JS_ThrowReferenceError(ctx, "load shared library modules failed");
     return NULL;
