@@ -812,7 +812,7 @@ readdir_r(
 
         /* Attempt to convert file name to multi-byte string */
         error = dirent_wcstombs_s(
-            &n, entry->d_name, PATH_MAX + 1, datap->cFileName, PATH_MAX + 1);
+            &n, entry->d_name, PATH_MAX + 1, datap->cFileName, -1);
 
         /*
          * If the file name cannot be represented by a multi-byte string,
@@ -827,7 +827,7 @@ readdir_r(
         if (error  &&  datap->cAlternateFileName[0] != '\0') {
             error = dirent_wcstombs_s(
                 &n, entry->d_name, PATH_MAX + 1,
-                datap->cAlternateFileName, PATH_MAX + 1);
+                datap->cAlternateFileName, -1);
         }
 
         if (!error) {
