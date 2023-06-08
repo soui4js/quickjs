@@ -1085,11 +1085,10 @@ dirent_mbstowcs_s(
     const char *mbstr,
     size_t count)
 {
-    int error;
     int nCopy = MultiByteToWideChar(CP_UTF8, 0, mbstr, -1, wcstr, sizeInWords);
     if (*pReturnValue) *pReturnValue = nCopy;
-    error = nCopy<0?nCopy:0;
-    return error;
+    if(nCopy>0) return 0;
+    return GetLastError();
 }
 
 /* Convert wide-character string to multi-byte string */
@@ -1101,48 +1100,10 @@ dirent_wcstombs_s(
     const wchar_t *wcstr,
     size_t count)
 {
-    int error;
-
-#if defined(_MSC_VER)  &&  _MSC_VER >= 1400
     int nCopy = WideCharToMultiByte(CP_UTF8, 0, wcstr, count, mbstr, sizeInBytes, NULL, NULL);
-    error = 0;
-    /* Microsoft Visual Studio 2005 or later */
-    //error = wcstombs_s (pReturnValue, mbstr, sizeInBytes, wcstr, count);
-
-#else
-
-    /* Older Visual Studio or non-Microsoft compiler */
-    size_t n;
-
-    /* Convert to multi-byte string (or count the number of bytes needed) */
-    n = wcstombs (mbstr, wcstr, sizeInBytes);
-    if (!mbstr  ||  n < count) {
-
-        /* Zero-terminate output buffer */
-        if (mbstr  &&  sizeInBytes) {
-            if (n >= sizeInBytes) {
-                n = sizeInBytes - 1;
-            }
-            mbstr[n] = '\0';
-        }
-
-        /* Length of resulting multi-bytes string WITH zero-terminator */
-        if (pReturnValue) {
-            *pReturnValue = n + 1;
-        }
-
-        /* Success */
-        error = 0;
-
-    } else {
-
-        /* Cannot convert string */
-        error = 1;
-
-    }
-
-#endif
-    return error;
+    if (*pReturnValue) *pReturnValue = nCopy;
+    if(nCopy>0) return 0;
+    return GetLastError();
 }
 
 /* Set errno variable */
