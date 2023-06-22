@@ -66,6 +66,8 @@
 #if !defined(_WIN32)
 /* define it if printf uses the RNDN rounding mode instead of RNDNA */
 #define CONFIG_PRINTF_RNDN
+#else
+#include <sys/timeb.h>
 #endif
 
 /* define to include Atomics.* operations which depend on the OS
@@ -42077,8 +42079,9 @@ static JSValue js___date_clock(JSContext *ctx, JSValueConst this_val,
    between UTC time and local time 'd' in minutes */
 static int getTimezoneOffset(int64_t time) {
 #if defined(_WIN32)
-    /* XXX: TODO */
-    return 0;
+    struct timeb tmb;
+    ftime(&tmb);
+    return tmb.timezone;
 #else
     time_t ti;
     struct tm tm;
