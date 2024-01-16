@@ -39,6 +39,7 @@
 #elif defined(__FreeBSD__)
 #include <malloc_np.h>
 #endif
+#include <pthread.h>
 
 #include "cutils.h"
 #include "list.h"
@@ -286,6 +287,7 @@ struct JSRuntime {
     JSHostPromiseRejectionTracker *host_promise_rejection_tracker;
     void *host_promise_rejection_tracker_opaque;
     
+    pthread_mutex_t mutex;
     struct list_head job_list; /* list of JSJobEntry.link */
 
     JSModuleNormalizeFunc *module_normalize_func;
@@ -1641,6 +1643,7 @@ JSRuntime *JS_NewRuntime2(const JSMallocFunctions *mf, void *opaque)
 #ifdef DUMP_LEAKS
     init_list_head(&rt->string_list);
 #endif
+    pthread_mutex_init(&rt->mutex, NULL);
     init_list_head(&rt->job_list);
 
     if (JS_InitAtoms(rt))
@@ -1827,13 +1830,18 @@ int JS_EnqueueJob(JSContext *ctx, JSJobFunc *job_func,
     for(i = 0; i < argc; i++) {
         e->argv[i] = JS_DupValue(ctx, argv[i]);
     }
+    pthread_mutex_lock(&rt->mutex);    
     list_add_tail(&e->link, &rt->job_list);
+    pthread_mutex_unlock(&rt->mutex);
     return 0;
 }
 
 BOOL JS_IsJobPending(JSRuntime *rt)
 {
-    return !list_empty(&rt->job_list);
+    pthread_mutex_lock(&rt->mutex);
+    BOOL bRet = !list_empty(&rt->job_list);
+    pthread_mutex_unlock(&rt->mutex);
+    return bRet;
 }
 
 /* return < 0 if exception, 0 if no job pending, 1 if a job was
@@ -1845,14 +1853,18 @@ int JS_ExecutePendingJob(JSRuntime *rt, JSContext **pctx)
     JSValue res;
     int i, ret;
 
+    pthread_mutex_lock(&rt->mutex);
     if (list_empty(&rt->job_list)) {
         *pctx = NULL;
+        pthread_mutex_unlock(&rt->mutex);
         return 0;
     }
 
     /* get the first pending job and execute it */
     e = list_entry(rt->job_list.next, JSJobEntry, link);
     list_del(&e->link);
+    pthread_mutex_unlock(&rt->mutex);
+
     ctx = e->ctx;
     res = e->job_func(e->ctx, e->argc, (JSValueConst *)e->argv);
     for(i = 0; i < e->argc; i++)
@@ -1942,6 +1954,7 @@ void JS_FreeRuntime(JSRuntime *rt)
 
     JS_FreeValueRT(rt, rt->current_exception);
 
+    pthread_mutex_lock(&rt->mutex);
     list_for_each_safe(el, el1, &rt->job_list) {
         JSJobEntry *e = list_entry(el, JSJobEntry, link);
         for(i = 0; i < e->argc; i++)
@@ -1949,6 +1962,8 @@ void JS_FreeRuntime(JSRuntime *rt)
         js_free_rt(rt, e);
     }
     init_list_head(&rt->job_list);
+    pthread_mutex_unlock(&rt->mutex);
+    pthread_mutex_destroy(&rt->mutex);
 
     JS_RunGC(rt);
 

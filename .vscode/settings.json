@@ -20,7 +20,10 @@
         "tuple": "c",
         "type_traits": "c",
         "vector": "c",
-        "compare": "c"
+        "compare": "c",
+        "typeinfo": "cpp",
+        "sdkddkver.h": "c",
+        "pthread.h": "c"
     },
     "C_Cpp.errorSquiggles": "disabled"
 }

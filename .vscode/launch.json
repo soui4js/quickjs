@@ -6,15 +6,6 @@
     "configurations": [
         
         {
-            "name": "Launch QuickJS",
-            "type": "quickjs",
-            "request": "launch",
-            "program": "${workspaceFolder}\\tests\\test_worker.js",
-            "runtimeExecutable": "${workspaceFolder}/build32/qjs.exe",
-            "address": "localhost",
-            "port": 58585,
-        },
-        {
             "name": "(gdb) Launch", // 启动配置的下拉菜单中显示的名称
             "type": "cppdbg",
             "request": "launch",
