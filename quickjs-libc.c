@@ -4254,7 +4254,7 @@ void js_std_promise_rejection_tracker(JSContext *ctx, JSValueConst promise,
 }
 
 #ifdef _WIN32
-
+HANDLE JS_GetRuntimeWait(JSRuntime* rt);
 int js_prepare_waitlist(JSContext* ctx, HANDLE* handles, int length,int *rwsize,int *msgSize,uint32_t *waitTime)
 {
     JSRuntime* rt = JS_GetRuntime(ctx);
@@ -4264,15 +4264,6 @@ int js_prepare_waitlist(JSContext* ctx, HANDLE* handles, int length,int *rwsize,
     int osrw_cnt = 0;
     int msg_cnt = 0;
     uint32_t min_delay = INFINITE;
-
-    JSContext* ctx1 = NULL;
-    int err = 0;
-    JS_ExecutePendingJob(JS_GetRuntime(ctx), &ctx1);
-    if (err <= 0) {
-        if (err < 0) {
-            js_std_dump_error(ctx1);
-        }
-    }
 
     if (!list_empty(&ts->os_timers)) {
         int64_t cur_time = get_time_ms();
@@ -4304,10 +4295,12 @@ time_start:
     if (waitTime) {
         *waitTime = min_delay;
     }
-    if (list_empty(&ts->os_rw_handlers) && list_empty(&ts->port_list))
-        return 0; /* no more events */
-
     memset(handles, 0, sizeof(HANDLE)*length);
+    if (list_empty(&ts->os_rw_handlers) && list_empty(&ts->port_list))
+    {
+        handles[0] = JS_GetRuntimeWait(rt);
+        return 1; /* no more events */
+    }
     list_for_each(el, &ts->os_rw_handlers) {
         if (osrw_cnt > length)
             break;
@@ -4324,9 +4317,10 @@ time_start:
             handles[osrw_cnt + msg_cnt++] = ps->hSemaphore;
         }
     }
+    handles[osrw_cnt + msg_cnt] = JS_GetRuntimeWait(rt);
     if(rwsize) *rwsize = osrw_cnt;
     if (msgSize) *msgSize = msg_cnt;
-    return osrw_cnt + msg_cnt;
+    return osrw_cnt + msg_cnt + 1;
 }
 
 void js_handle_waitresult(JSContext* ctx, int ret, int osrw_cnt, int msg_cnt) {
@@ -4338,7 +4332,15 @@ void js_handle_waitresult(JSContext* ctx, int ret, int osrw_cnt, int msg_cnt) {
     if (ret == WAIT_TIMEOUT) {
         //wait timeout received.
         JS_ExecuteTimer(ctx);
-    }else if (ret >= (int)WAIT_OBJECT_0 && ret < (int)WAIT_OBJECT_0 + osrw_cnt + msg_cnt) {
+    }else if (ret >= (int)WAIT_OBJECT_0 && ret < (int)WAIT_OBJECT_0 + osrw_cnt + msg_cnt + 1) {
+        JSContext* ctx1 = NULL;
+        int err = 0;
+        JS_ExecutePendingJob(JS_GetRuntime(ctx), &ctx1);
+        if (err <= 0) {
+            if (err < 0) {
+                js_std_dump_error(ctx1);
+            }
+        }
         int idx = 0;
         list_for_each(el, &ts->os_rw_handlers) {
             rh = list_entry(el, JSOSRWHandler, link);

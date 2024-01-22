@@ -39,6 +39,7 @@
 #elif defined(__FreeBSD__)
 #include <malloc_np.h>
 #endif
+#include <pthread.h>
 
 #include "cutils.h"
 #include "list.h"
@@ -80,7 +81,9 @@
 /* enable stack limitation */
 #define CONFIG_STACK_CHECK
 #endif
-
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 /* dump object free */
 //#define DUMP_FREE
@@ -286,8 +289,11 @@ struct JSRuntime {
     JSHostPromiseRejectionTracker *host_promise_rejection_tracker;
     void *host_promise_rejection_tracker_opaque;
     
+    pthread_mutex_t mutex;
     struct list_head job_list; /* list of JSJobEntry.link */
-
+#ifdef _WIN32
+    HANDLE hWait;
+#endif
     JSModuleNormalizeFunc *module_normalize_func;
     JSModuleLoaderFunc *module_loader_func;
     JSModuleUnloaderFunc* module_unloader_func;
@@ -819,6 +825,7 @@ typedef struct JSJobEntry {
     struct list_head link;
     JSContext *ctx;
     JSJobFunc *job_func;
+    void *opaque;
     int argc;
     JSValue argv[0];
 } JSJobEntry;
@@ -1642,7 +1649,15 @@ JSRuntime *JS_NewRuntime2(const JSMallocFunctions *mf, void *opaque)
     init_list_head(&rt->string_list);
 #endif
     init_list_head(&rt->job_list);
-
+    
+    pthread_mutexattr_t attr;
+    pthread_mutexattr_init(&attr);
+    pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
+    pthread_mutex_init(&rt->mutex, &attr);
+    pthread_mutexattr_destroy(&attr);
+#ifdef _WIN32
+    rt->hWait = CreateEvent(NULL, FALSE, FALSE, NULL);
+#endif
     if (JS_InitAtoms(rt))
         goto fail;
 
@@ -1676,7 +1691,11 @@ void *JS_GetRuntimeOpaque(JSRuntime *rt)
 {
     return rt->user_opaque;
 }
-
+#ifdef _WIN32
+HANDLE JS_GetRuntimeWait(JSRuntime* rt) {
+    return rt->hWait;
+}
+#endif
 void JS_SetRuntimeOpaque(JSRuntime *rt, void *opaque)
 {
     rt->user_opaque = opaque;
@@ -1810,9 +1829,15 @@ void JS_SetSharedArrayBufferFunctions(JSRuntime *rt,
     rt->sab_funcs = *sf;
 }
 
-/* return 0 if OK, < 0 if exception */
 int JS_EnqueueJob(JSContext *ctx, JSJobFunc *job_func,
                   int argc, JSValueConst *argv)
+{
+    return JS_EnqueueJob2(ctx,job_func,argc,argv,NULL);
+}
+
+/* return 0 if OK, < 0 if exception */
+int JS_EnqueueJob2(JSContext *ctx, JSJobFunc *job_func,
+                  int argc, JSValueConst *argv,void* opaque)
 {
     JSRuntime *rt = ctx->rt;
     JSJobEntry *e;
@@ -1827,13 +1852,22 @@ int JS_EnqueueJob(JSContext *ctx, JSJobFunc *job_func,
     for(i = 0; i < argc; i++) {
         e->argv[i] = JS_DupValue(ctx, argv[i]);
     }
+    e->opaque = opaque;
+    pthread_mutex_lock(&rt->mutex);    
     list_add_tail(&e->link, &rt->job_list);
+    pthread_mutex_unlock(&rt->mutex);
+#ifdef _WIN32
+    SetEvent(rt->hWait);
+#endif
     return 0;
 }
 
 BOOL JS_IsJobPending(JSRuntime *rt)
 {
-    return !list_empty(&rt->job_list);
+    pthread_mutex_lock(&rt->mutex);
+    BOOL bRet = !list_empty(&rt->job_list);
+    pthread_mutex_unlock(&rt->mutex);
+    return bRet;
 }
 
 /* return < 0 if exception, 0 if no job pending, 1 if a job was
@@ -1845,16 +1879,20 @@ int JS_ExecutePendingJob(JSRuntime *rt, JSContext **pctx)
     JSValue res;
     int i, ret;
 
+    pthread_mutex_lock(&rt->mutex);
     if (list_empty(&rt->job_list)) {
         *pctx = NULL;
+        pthread_mutex_unlock(&rt->mutex);
         return 0;
     }
 
     /* get the first pending job and execute it */
     e = list_entry(rt->job_list.next, JSJobEntry, link);
     list_del(&e->link);
+    pthread_mutex_unlock(&rt->mutex);
+
     ctx = e->ctx;
-    res = e->job_func(e->ctx, e->argc, (JSValueConst *)e->argv);
+    res = e->job_func(e->ctx, e->argc, (JSValueConst *)e->argv,e->opaque);
     for(i = 0; i < e->argc; i++)
         JS_FreeValue(ctx, e->argv[i]);
     if (JS_IsException(res))
@@ -1942,6 +1980,7 @@ void JS_FreeRuntime(JSRuntime *rt)
 
     JS_FreeValueRT(rt, rt->current_exception);
 
+    pthread_mutex_lock(&rt->mutex);
     list_for_each_safe(el, el1, &rt->job_list) {
         JSJobEntry *e = list_entry(el, JSJobEntry, link);
         for(i = 0; i < e->argc; i++)
@@ -1949,7 +1988,12 @@ void JS_FreeRuntime(JSRuntime *rt)
         js_free_rt(rt, e);
     }
     init_list_head(&rt->job_list);
-
+    pthread_mutex_unlock(&rt->mutex);
+    pthread_mutex_destroy(&rt->mutex);
+#ifdef _WIN32
+    CloseHandle(rt->hWait);
+    rt->hWait = 0;
+#endif
     JS_RunGC(rt);
 
 #ifdef DUMP_LEAKS
@@ -4739,7 +4783,7 @@ static __maybe_unused void JS_DumpShapes(JSRuntime *rt)
 static JSValue JS_NewObjectFromShape(JSContext *ctx, JSShape *sh, JSClassID class_id)
 {
     JSObject *p;
-
+    pthread_mutex_lock(&ctx->rt->mutex);
     js_trigger_gc(ctx->rt, sizeof(JSObject));
     p = js_malloc(ctx, sizeof(JSObject));
     if (unlikely(!p))
@@ -4761,6 +4805,7 @@ static JSValue JS_NewObjectFromShape(JSContext *ctx, JSShape *sh, JSClassID clas
         js_free(ctx, p);
     fail:
         js_free_shape(ctx->rt, sh);
+        pthread_mutex_unlock(&ctx->rt->mutex);
         return JS_EXCEPTION;
     }
 
@@ -4838,6 +4883,7 @@ static JSValue JS_NewObjectFromShape(JSContext *ctx, JSShape *sh, JSClassID clas
     }
     p->header.ref_count = 1;
     add_gc_object(ctx->rt, &p->header, JS_GC_OBJ_TYPE_JS_OBJECT);
+    pthread_mutex_unlock(&ctx->rt->mutex);
     return JS_MKPTR(JS_TAG_OBJECT, p);
 }
 
@@ -4856,6 +4902,7 @@ JSValue JS_NewObjectProtoClass(JSContext *ctx, JSValueConst proto_val,
     JSShape *sh;
     JSObject *proto;
 
+    pthread_mutex_lock(&ctx->rt->mutex);
     proto = get_proto_obj(proto_val);
     sh = find_hashed_shape_proto(ctx->rt, proto);
     if (likely(sh)) {
@@ -4863,8 +4910,12 @@ JSValue JS_NewObjectProtoClass(JSContext *ctx, JSValueConst proto_val,
     } else {
         sh = js_new_shape(ctx, proto);
         if (!sh)
+        {
+            pthread_mutex_unlock(&ctx->rt->mutex);
             return JS_EXCEPTION;
+        }
     }
+    pthread_mutex_unlock(&ctx->rt->mutex);
     return JS_NewObjectFromShape(ctx, sh, class_id);
 }
 
@@ -28291,7 +28342,7 @@ JSModuleDef *JS_RunModule(JSContext *ctx, const char *basename,
 }
 
 static JSValue js_dynamic_import_job(JSContext *ctx,
-                                     int argc, JSValueConst *argv)
+                                     int argc, JSValueConst *argv,void *opaque)
 {
     JSValueConst *resolving_funcs = argv;
     JSValueConst basename_val = argv[2];
@@ -46395,7 +46446,7 @@ static void promise_reaction_data_free(JSRuntime *rt,
 }
 
 static JSValue promise_reaction_job(JSContext *ctx, int argc,
-                                    JSValueConst *argv)
+                                    JSValueConst *argv,void *opaque)
 {
     JSValueConst handler, arg, func;
     JSValue res, res2;
@@ -46493,7 +46544,7 @@ static void reject_promise(JSContext *ctx, JSValueConst promise,
 }
 
 static JSValue js_promise_resolve_thenable_job(JSContext *ctx,
-                                               int argc, JSValueConst *argv)
+                                               int argc, JSValueConst *argv,void *opaque)
 {
     JSValueConst promise, thenable, then;
     JSValue args[2], res;
@@ -54547,41 +54598,44 @@ JSValue js_debugger_evaluate(JSContext *ctx, int stack_index, JSValue expression
     return JS_UNDEFINED;
 }
 
-JSValue JS_DupValue(JSContext *ctx, JSValueConst v)
+JSValue JS_DupValueRT(JSRuntime *rt, JSValueConst v)
 {
     if (JS_VALUE_HAS_REF_COUNT(v)) {
+        pthread_mutex_lock(&rt->mutex);
         JSRefCountHeader *p = (JSRefCountHeader *)JS_VALUE_GET_PTR(v);
         p->ref_count++;
+        pthread_mutex_unlock(&rt->mutex);
     }
     return (JSValue)v;
 }
 
-JSValue JS_DupValueRT(JSRuntime *rt, JSValueConst v)
+JSValue JS_DupValue(JSContext *ctx, JSValueConst v)
 {
-    if (JS_VALUE_HAS_REF_COUNT(v)) {
-        JSRefCountHeader *p = (JSRefCountHeader *)JS_VALUE_GET_PTR(v);
-        p->ref_count++;
+    if(!ctx){
+        if (JS_VALUE_HAS_REF_COUNT(v)) {
+            JSRefCountHeader *p = (JSRefCountHeader *)JS_VALUE_GET_PTR(v);
+            p->ref_count++;
+        }
+        return (JSValue)v;
+    }else{
+        return JS_DupValueRT(ctx->rt,v);
     }
-    return (JSValue)v;
 }
 
 void __JS_FreeValue(JSContext *ctx, JSValue v);
 void JS_FreeValue(JSContext *ctx, JSValue v)
 {
-    if (JS_VALUE_HAS_REF_COUNT(v)) {
-        JSRefCountHeader *p = (JSRefCountHeader *)JS_VALUE_GET_PTR(v);
-        if (--p->ref_count <= 0) {
-            __JS_FreeValue(ctx, v);
-        }
-    }
+    JS_FreeValueRT(ctx->rt,v);
 }
 void __JS_FreeValueRT(JSRuntime *rt, JSValue v);
 void JS_FreeValueRT(JSRuntime *rt, JSValue v)
 {
     if (JS_VALUE_HAS_REF_COUNT(v)) {
+        pthread_mutex_lock(&rt->mutex);
         JSRefCountHeader *p = (JSRefCountHeader *)JS_VALUE_GET_PTR(v);
         if (--p->ref_count <= 0) {
             __JS_FreeValueRT(rt, v);
         }
+        pthread_mutex_unlock(&rt->mutex);
     }
 }
