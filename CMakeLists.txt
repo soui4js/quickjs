@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.10)
 
 project(libquickjs)
 
-#set(CMAKE_MAKE_PROGRAM D:/msys64/usr/bin/make).
+#set(CMAKE_MAKE_PROGRAM D:/msys64/usr/bin/make)
 #set(CMAKE_MAKE_PROGRAM /mingw32/bin/ninja.exe -j4)
 set(CMAKE_CXX_COMPILE_FEATURES "${CMAKE_CXX_COMPILE_FEATURES} /MT /GR- /utf-8")
 #enable debug
