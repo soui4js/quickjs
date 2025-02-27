@@ -25,8 +25,11 @@
 ifeq ($(shell uname -s),Darwin)
 CONFIG_DARWIN=y
 endif
+ifeq ($(shell uname -s),FreeBSD)
+CONFIG_FREEBSD=y
+endif
 # Windows cross compilation from Linux
-CONFIG_WIN32=y
+# CONFIG_WIN32=y
 # use link time optimization (smaller and faster executables but slower build)
 CONFIG_LTO=n
 # consider warnings as errors (for development)
@@ -75,6 +78,7 @@ ifdef CONFIG_CLANG
   CFLAGS += -Wwrite-strings
   CFLAGS += -Wchar-subscripts -funsigned-char
   CFLAGS += -MMD -MF $(OBJDIR)/$(@F).d
+  CFLAGS += -fPIC
   ifdef CONFIG_DEFAULT_AR
     AR=$(CROSS_PREFIX)ar
   else
@@ -89,6 +93,7 @@ else
   CC=$(CROSS_PREFIX)gcc
   CFLAGS=-g -Wall -MMD -MF $(OBJDIR)/$(@F).d
   CFLAGS += -Wno-array-bounds -Wno-format-truncation
+  CFLAGS += -fPIC
   ifdef CONFIG_LTO
     AR=$(CROSS_PREFIX)gcc-ar
   else
@@ -179,10 +184,13 @@ ifdef CONFIG_BIGNUM
 QJS_LIB_OBJS+=$(OBJDIR)/libbf.o
 QJS_OBJS+=$(OBJDIR)/qjscalc.o
 endif
-
+ifdef CONFIG_WIN32
 HOST_LIBS=-lm -Wl,-Bstatic -lpthread -Wl,-Bdynamic -lws2_32
 LIBS=-lm -Wl,-Bstatic -lpthread -Wl,-Bdynamic -lws2_32
-
+else
+HOST_LIBS=-lm -Wl,-Bstatic -lpthread -Wl,-Bdynamic
+LIBS=-lm -Wl,-Bstatic -lpthread -Wl,-Bdynamic
+endif
 LIBS+=$(EXTRA_LIBS)
 
 $(OBJDIR):

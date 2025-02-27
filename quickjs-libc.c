@@ -37,9 +37,9 @@
 #include <limits.h>
 #include <sys/stat.h>
 
+#include <windows.h>
 #if defined(_WIN32)
 #include "win/dirent.h"
-#include <windows.h>
 #include <conio.h>
 #include <utime.h>
 #else
@@ -102,21 +102,12 @@ typedef struct {
 } JSWorkerMessage;
 
 typedef struct {
-    #ifdef _WIN32
-    long ref_count;
-    #else
-    int ref_count;
-    #endif
+    LONG ref_count;
 #ifdef USE_WORKER
     pthread_mutex_t mutex;
 #endif
     struct list_head msg_queue; /* list of JSWorkerMessage.link */
-#ifdef _WIN32
     HANDLE hSemaphore;
-#else
-    int read_fd;
-    int write_fd;
-#endif
 } JSWorkerMessagePipe;
 
 typedef struct {
@@ -372,7 +363,7 @@ uint8_t *js_load_file(JSContext *ctx, size_t *pbuf_len, const char *filename)
     size_t buf_len;
     long lret;
     
-    f = fopen_r(filename, "rb");
+    f = fopen(filename, "rb");
     if (!f)
         return NULL;
     if (fseek(f, 0, SEEK_END) < 0)
@@ -556,9 +547,9 @@ static void js_module_unload_so(JSContext* ctx, void* so_handle)
 {
     JSUninitModuleFunc* uninit;
     if (so_handle != NULL) {
-        uninit = dlsym(m->so_handle, "js_uninit_module");
+        uninit = dlsym(so_handle, "js_uninit_module");
         if (uninit) uninit(ctx);
-        dlclose(m->so_handle);
+        dlclose(so_handle);
     }
 }
 #endif /* !_WIN32 */
@@ -748,7 +739,13 @@ static JSValue js_std_getenviron(JSContext *ctx, JSValueConst this_val,
     obj = JS_NewObject(ctx);
     if (JS_IsException(obj))
         return JS_EXCEPTION;
+#ifdef _WIN32   
     envp = environ;
+#else
+    extern char** environ;  // 声明全局变量 environ
+	envp = environ;
+#endif//_WIN32
+
     for(idx = 0; envp[idx] != NULL; idx++) {
         name = envp[idx];
         p = strchr(name, '=');
@@ -1927,7 +1924,7 @@ static void free_rw_handler(JSRuntime *rt, JSOSRWHandler *rh)
     js_free_rt(rt, rh);
 }
 
-static JSValue js_os_setReadHandler(JSContext *ctx, JSValueConst this_val,
+static JSValue js_os_setRWHandler(JSContext *ctx, JSValueConst this_val,
                                     int argc, JSValueConst *argv, int magic)
 {
     JSRuntime *rt = JS_GetRuntime(ctx);
@@ -1993,9 +1990,7 @@ static void os_signal_handler(int sig_num)
     os_pending_signals |= ((uint64_t)1 << sig_num);
 }
 
-#if defined(_WIN32)
 typedef void (*sighandler_t)(int sig_num);
-#endif
 
 static JSValue js_os_signal(JSContext *ctx, JSValueConst this_val,
                             int argc, JSValueConst *argv)
@@ -2240,21 +2235,6 @@ static int handle_posted_message(JSRuntime *rt, JSContext *ctx,
         /* remove the message from the queue */
         list_del(&msg->link);
 
-        if (list_empty(&ps->msg_queue)) {
-#ifndef _WIN32
-
-            uint8_t buf[16];
-            int ret;
-            for(;;) {
-                ret = read(ps->read_fd, buf, sizeof(buf));
-                if (ret >= 0)
-                    break;
-                if (errno != EAGAIN && errno != EINTR)
-                    break;
-            }
-#endif
-        }
-
         pthread_mutex_unlock(&ps->mutex);
 
         data_obj = JS_ReadObject(ctx, msg->data, msg->data_len,
@@ -2300,7 +2280,6 @@ static int handle_posted_message(JSRuntime *rt, JSContext *ctx,
 }
 #endif
 
-#ifdef _WIN32
 static int js_os_poll2(JSContext* ctx,int min_delay)
 {
     JSRuntime *rt = JS_GetRuntime(ctx);
@@ -2412,126 +2391,8 @@ done:
     return 0;
 }
 
-#else
-static int js_os_poll2(JSContext *ctx, int  min_delay)
-{
-    JSRuntime *rt = JS_GetRuntime(ctx);
-    JSThreadState *ts = JS_GetRuntimeOpaque(rt);
-    int ret, fd_max;
-    fd_set rfds, wfds;
-    JSOSRWHandler *rh;
-    struct list_head *el;
-    struct timeval tv, *tvp;
-
-    /* only check signals in the main thread */
-    if (!ts->recv_pipe &&
-        unlikely(os_pending_signals != 0)) {
-        JSOSSignalHandler *sh;
-        uint64_t mask;
-        
-        list_for_each(el, &ts->os_signal_handlers) {
-            sh = list_entry(el, JSOSSignalHandler, link);
-            mask = (uint64_t)1 << sh->sig_num;
-            if (os_pending_signals & mask) {
-                os_pending_signals &= ~mask;
-                call_handler(ctx, sh->func);
-                return 0;
-            }
-        }
-    }
-
-    if (list_empty(&ts->os_rw_handlers) && list_empty(&ts->os_timers) &&
-        list_empty(&ts->port_list))
-        return -1; /* no more events */
-    
-    if (!list_empty(&ts->os_timers)) {
-        int64_t cur_time, delay,timer_delay=10000;
-        cur_time = get_time_ms();
-        list_for_each(el, &ts->os_timers) {
-            JSOSTimer *th = list_entry(el, JSOSTimer, link);
-            delay = th->timeout - cur_time;
-            if (delay <= 0) {
-                JSValue func,thisObj;
-                /* the timer expired */
-                func = th->func;
-                thisObj = th->thisObj;
-                th->func = JS_UNDEFINED;
-                th->thisObj = JS_UNDEFINED;
-                unlink_timer(rt, th);
-                if (!th->has_object)
-                    free_timer(rt, th);
-                call_handler2(ctx, func,thisObj);
-                JS_FreeValue(ctx, func);
-                JS_FreeValue(ctx, thisObj);
-                return 0;
-            } else if (delay < timer_delay) {
-                timer_delay = delay;
-            }
-        }
-        if (min_delay > (int)timer_delay)
-            min_delay = (int)timer_delay;
-        tv.tv_sec = min_delay / 1000;
-        tv.tv_usec = (min_delay % 1000) * 1000;
-        tvp = &tv;
-    } else {
-        tvp = NULL;
-    }
-    
-    FD_ZERO(&rfds);
-    FD_ZERO(&wfds);
-    fd_max = -1;
-    list_for_each(el, &ts->os_rw_handlers) {
-        rh = list_entry(el, JSOSRWHandler, link);
-        fd_max = max_int(fd_max, rh->fd);
-        if (!JS_IsNull(rh->rw_func[0]))
-            FD_SET(rh->fd, &rfds);
-        if (!JS_IsNull(rh->rw_func[1]))
-            FD_SET(rh->fd, &wfds);
-    }
-
-    list_for_each(el, &ts->port_list) {
-        JSWorkerMessageHandler *port = list_entry(el, JSWorkerMessageHandler, link);
-        if (!JS_IsNull(port->on_message_func)) {
-            JSWorkerMessagePipe *ps = port->recv_pipe;
-            fd_max = max_int(fd_max, ps->read_fd);
-            FD_SET(ps->read_fd, &rfds);
-        }
-    }
-    ret = select(fd_max + 1, &rfds, &wfds, NULL, tvp);
-    if (ret > 0) {
-        list_for_each(el, &ts->os_rw_handlers) {
-            rh = list_entry(el, JSOSRWHandler, link);
-            if (!JS_IsNull(rh->rw_func[0]) &&
-                FD_ISSET(rh->fd, &rfds)) {
-                call_handler(ctx, rh->rw_func[0]);
-                /* must stop because the list may have been modified */
-                goto done;
-            }
-            if (!JS_IsNull(rh->rw_func[1]) &&
-                FD_ISSET(rh->fd, &wfds)) {
-                call_handler(ctx, rh->rw_func[1]);
-                /* must stop because the list may have been modified */
-                goto done;
-            }
-        }
-
-        list_for_each(el, &ts->port_list) {
-            JSWorkerMessageHandler *port = list_entry(el, JSWorkerMessageHandler, link);
-            if (!JS_IsNull(port->on_message_func)) {
-                JSWorkerMessagePipe *ps = port->recv_pipe;
-                if (FD_ISSET(ps->read_fd, &rfds)) {
-                    if (handle_posted_message(rt, ctx, port))
-                        goto done;
-                }
-            }
-        }
-    }
-    done:
-    return 0;
-}
-#endif /* !_WIN32 */
 static int js_os_poll(JSContext* ctx) {
-    return js_os_poll2(ctx, INFINITE);
+    return js_os_poll2(ctx, -1);
 }
 
 static JSValue make_obj_error(JSContext *ctx,
@@ -2582,7 +2443,7 @@ int mychdir(
     MultiByteToWideChar(CP_UTF8, 0, _Path, -1, path, MAX_PATH);
     return _wchdir(path);
 #else
-    return chdir(_path);
+    return chdir(_Path);
 #endif
 }
 
@@ -2676,7 +2537,7 @@ static int64_t timespec_to_ms(const struct timespec *tv)
 }
 #endif
 
-
+#if defined(_WIN32)
 int mystat64(
     char const* _FileName,
     struct _stat64* _Stat
@@ -2685,7 +2546,7 @@ int mystat64(
     MultiByteToWideChar(CP_UTF8, 0, _FileName, -1, wPath, MAX_PATH);
     return _wstat64(wPath, _Stat);
 }
-
+#endif
 /* return [obj, errcode] */
 static JSValue js_os_stat(JSContext *ctx, JSValueConst this_val,
                           int argc, JSValueConst *argv, int is_lstat)
@@ -3066,6 +2927,9 @@ static JSValue js_os_exec(JSContext *ctx, JSValueConst this_val,
     JSValueConst options, args = argv[0];
     JSValue val, ret_val;
     const char **exec_argv, *file = NULL, *str, *cwd = NULL;
+#ifndef _WIN32
+	extern char** environ;
+#endif//_WIN32
     char **envp = environ;
     uint32_t exec_argc, i;
     int ret, pid, status;
@@ -3376,25 +3240,15 @@ typedef struct {
 static JSClassID js_worker_class_id;
 static JSContext *(*js_worker_new_context_func)(JSRuntime *rt);
 
-#ifdef _WIN32
-static int atomic_inc(long* ptr) {
+
+static int atomic_inc(LONG* ptr) {
     return InterlockedIncrement(ptr);
 }
 
-static int atomic_dec(long* ptr) {
+static int atomic_dec(LONG* ptr) {
 
     return InterlockedDecrement(ptr);
 }
-#else
-static int atomic_inc(int* ptr) {
-    return atomic_fetch_add((_Atomic(uint32_t)*)ptr, 1) + 1;
-}
-
-static int atomic_dec(int* ptr) {
-    return atomic_fetch_add((_Atomic(uint32_t)*)ptr, -1) - 1;
-}
-#endif
-
 
 /* shared array buffer allocator */
 static void *js_sab_alloc(void *opaque, size_t size)
@@ -3450,12 +3304,7 @@ static JSWorkerMessagePipe *js_new_message_pipe(void)
     ps->ref_count = 1;
     init_list_head(&ps->msg_queue);
     pthread_mutex_init(&ps->mutex, NULL);
-#ifdef _WIN32
-    ps->hSemaphore = CreateSemaphore(NULL, 0, LONG_MAX, NULL);
-#else
-    ps->read_fd = pipe_fds[0];
-    ps->write_fd = pipe_fds[1];
-#endif
+    ps->hSemaphore = CreateSemaphore(NULL, 0, INT_MAX, NULL);
     return ps;
 }
 
@@ -3494,12 +3343,7 @@ static void js_free_message_pipe(JSWorkerMessagePipe *ps)
             js_free_message(msg);
         }
         pthread_mutex_destroy(&ps->mutex);
-#ifdef _WIN32
         CloseHandle(ps->hSemaphore);
-#else
-        close(ps->read_fd);
-        close(ps->write_fd);
-#endif
         free(ps);
     }
 }
@@ -3756,21 +3600,7 @@ static JSValue js_worker_postMessage(JSContext *ctx, JSValueConst this_val,
     ps = worker->send_pipe;
     pthread_mutex_lock(&ps->mutex);
     /* indicate that data is present */
-#ifdef _WIN32
     ReleaseSemaphore(ps->hSemaphore, 1, NULL);
-#else
-    if (list_empty(&ps->msg_queue)) {
-        uint8_t ch = '\0';
-        int ret;
-        for(;;) {
-            ret = write(ps->write_fd, &ch, 1);
-            if (ret == 1)
-                break;
-            if (ret < 0 && (errno != EAGAIN || errno != EINTR))
-                break;
-        }
-    }
-#endif
 
     list_add_tail(&msg->link, &ps->msg_queue);
     pthread_mutex_unlock(&ps->mutex);
@@ -3909,8 +3739,8 @@ static const JSCFunctionListEntry js_os_funcs[] = {
     JS_CFUNC_DEF("ttySetRaw", 1, js_os_ttySetRaw ),
     JS_CFUNC_DEF("remove", 1, js_os_remove ),
     JS_CFUNC_DEF("rename", 2, js_os_rename ),
-    JS_CFUNC_MAGIC_DEF("setReadHandler", 2, js_os_setReadHandler, 0 ),
-    JS_CFUNC_MAGIC_DEF("setWriteHandler", 2, js_os_setReadHandler, 1 ),
+    JS_CFUNC_MAGIC_DEF("setReadHandler", 2, js_os_setRWHandler, 0 ),
+    JS_CFUNC_MAGIC_DEF("setWriteHandler", 2, js_os_setRWHandler, 1 ),
     JS_CFUNC_DEF("signal", 2, js_os_signal ),
     OS_FLAG(SIGINT),
     OS_FLAG(SIGABRT),
@@ -4253,7 +4083,6 @@ void js_std_promise_rejection_tracker(JSContext *ctx, JSValueConst promise,
     }
 }
 
-#ifdef _WIN32
 HANDLE JS_GetRuntimeWait(JSRuntime* rt);
 int js_prepare_waitlist(JSContext* ctx, HANDLE* handles, int length,int *rwsize,int *msgSize,uint32_t *waitTime)
 {
@@ -4314,7 +4143,11 @@ time_start:
             JSWorkerMessagePipe* ps = port->recv_pipe;
             if (osrw_cnt + msg_cnt > length)
                 break;
+                #ifdef _WIN32
             handles[osrw_cnt + msg_cnt++] = ps->hSemaphore;
+            #else
+            handles[osrw_cnt + msg_cnt++] = 0;
+            #endif
         }
     }
     handles[osrw_cnt + msg_cnt] = JS_GetRuntimeWait(rt);
@@ -4368,7 +4201,6 @@ void js_handle_waitresult(JSContext* ctx, int ret, int osrw_cnt, int msg_cnt) {
     }
 }
 
-#endif
 /* main loop which calls the user JS callbacks */
 void js_std_loop(JSContext *ctx)
 {

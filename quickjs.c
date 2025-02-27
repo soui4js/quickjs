@@ -32,6 +32,7 @@
 #include <time.h>
 #include <fenv.h>
 #include <math.h>
+#include <windows.h>
 #if defined(__APPLE__)
 #include <malloc/malloc.h>
 #elif defined(__linux__)
@@ -291,9 +292,8 @@ struct JSRuntime {
     
     pthread_mutex_t mutex;
     struct list_head job_list; /* list of JSJobEntry.link */
-#ifdef _WIN32
+
     HANDLE hWait;
-#endif
     JSModuleNormalizeFunc *module_normalize_func;
     JSModuleLoaderFunc *module_loader_func;
     JSModuleUnloaderFunc* module_unloader_func;
@@ -1655,9 +1655,8 @@ JSRuntime *JS_NewRuntime2(const JSMallocFunctions *mf, void *opaque)
     pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
     pthread_mutex_init(&rt->mutex, &attr);
     pthread_mutexattr_destroy(&attr);
-#ifdef _WIN32
+
     rt->hWait = CreateEvent(NULL, FALSE, FALSE, NULL);
-#endif
     if (JS_InitAtoms(rt))
         goto fail;
 
@@ -1691,11 +1690,11 @@ void *JS_GetRuntimeOpaque(JSRuntime *rt)
 {
     return rt->user_opaque;
 }
-#ifdef _WIN32
+
 HANDLE JS_GetRuntimeWait(JSRuntime* rt) {
     return rt->hWait;
 }
-#endif
+
 void JS_SetRuntimeOpaque(JSRuntime *rt, void *opaque)
 {
     rt->user_opaque = opaque;
@@ -1856,9 +1855,8 @@ int JS_EnqueueJob2(JSContext *ctx, JSJobFunc *job_func,
     pthread_mutex_lock(&rt->mutex);    
     list_add_tail(&e->link, &rt->job_list);
     pthread_mutex_unlock(&rt->mutex);
-#ifdef _WIN32
+
     SetEvent(rt->hWait);
-#endif
     return 0;
 }
 
@@ -1990,10 +1988,9 @@ void JS_FreeRuntime(JSRuntime *rt)
     init_list_head(&rt->job_list);
     pthread_mutex_unlock(&rt->mutex);
     pthread_mutex_destroy(&rt->mutex);
-#ifdef _WIN32
+
     CloseHandle(rt->hWait);
     rt->hWait = 0;
-#endif
     JS_RunGC(rt);
 
 #ifdef DUMP_LEAKS

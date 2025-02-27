@@ -20,7 +20,7 @@
             "request": "launch",
             "program": "${workspaceFolder}/build/qjs.exe", // 将要进行调试的程序的路径， workspaceFolder指当前工作目录（即vscode打开的目录：hello），main指的是makefile编译后目标码（可执行程序）的名字
             "args": [
-                "test.js"
+                
             ], // 程序启动的参数
             "stopAtEntry": false, // 设置true时，程序将暂停在程序入口处, 即main()的第一个{位置
             "cwd": "${workspaceFolder}", // 调试时的工作目录
