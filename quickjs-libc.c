@@ -454,7 +454,6 @@ typedef void (JSUninitModuleFunc)(JSContext* ctx);
 
 void JS_SetModuleHandle(JSModuleDef* m, void* so_handle);
 
-#if defined(_WIN32)
 static JSModuleDef *js_module_loader_so(JSContext *ctx,
                                         const char *module_name)
 {
@@ -463,10 +462,18 @@ static JSModuleDef *js_module_loader_so(JSContext *ctx,
     HMODULE hd = LoadLibraryW(wModName);
     if (hd == NULL) {
         JS_ThrowReferenceError(ctx, "load shared library modules failed");
-    return NULL;
-}
-    char szName[MAX_PATH];
+        return NULL;
+    }
+    char szName[MAX_PATH]={0};
+    #ifdef _WIN32
     _splitpath(module_name, NULL, NULL, szName, NULL);
+    #else
+    const char *path=strrchr(module_name,'/');
+    path= (path==NULL)?module_name:path+1;
+    const char *ext = strrchr(module_name,'.');
+    if(!ext) ext = path+strlen(path);
+    strncpy(szName,path,ext-path);
+    #endif//_WIN32
     JSInitModuleFunc* init=NULL;
     JSModuleDef* m = NULL;
     init = (JSInitModuleFunc*)GetProcAddress(hd, "js_init_module");
@@ -492,67 +499,6 @@ static void js_module_unload_so(JSContext* ctx, void *so_handle)
     }
 }
 
-#else
-static JSModuleDef *js_module_loader_so(JSContext *ctx,
-                                        const char *module_name)
-{
-    JSModuleDef *m;
-    void *hd;
-    JSInitModuleFunc *init;
-    char *filename;
-    
-    if (!strchr(module_name, '/')) {
-        /* must add a '/' so that the DLL is not searched in the
-           system library paths */
-        filename = js_malloc(ctx, strlen(module_name) + 2 + 1);
-        if (!filename)
-            return NULL;
-        strcpy(filename, "./");
-        strcpy(filename + 2, module_name);
-    } else {
-        filename = (char *)module_name;
-    }
-    
-    /* C module */
-    hd = dlopen(filename, RTLD_NOW | RTLD_LOCAL);
-    if (filename != module_name)
-        js_free(ctx, filename);
-    if (!hd) {
-        JS_ThrowReferenceError(ctx, "could not load module filename '%s' as shared library",
-                               module_name);
-        goto fail;
-    }
-
-    init = dlsym(hd, "js_init_module");
-    if (!init) {
-        JS_ThrowReferenceError(ctx, "could not load module filename '%s': js_init_module not found",
-                               module_name);
-        goto fail;
-    }
-
-    m = init(ctx, module_name);
-    if (!m) {
-        JS_ThrowReferenceError(ctx, "could not load module filename '%s': initialization error",
-                               module_name);
-    fail:
-        if (hd)
-            dlclose(hd);
-        return NULL;
-    }
-    JS_SetModuleHandle(m, hd);
-    return m;
-}
-
-static void js_module_unload_so(JSContext* ctx, void* so_handle)
-{
-    JSUninitModuleFunc* uninit;
-    if (so_handle != NULL) {
-        uninit = dlsym(so_handle, "js_uninit_module");
-        if (uninit) uninit(ctx);
-        dlclose(so_handle);
-    }
-}
-#endif /* !_WIN32 */
 
 int js_module_set_import_meta(JSContext *ctx, JSValueConst func_val,
                               JS_BOOL use_realpath, JS_BOOL is_main)
