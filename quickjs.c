@@ -27395,10 +27395,10 @@ static char *js_default_module_normalize_name(JSContext *ctx,
     memcpy(filename, base_name, len);
     filename[len] = 0;
     for(i=0;i<len;i++){
-        if(filename[i]=='/')
-            filename[i]='\\';
+        if(filename[i]=='\\')
+            filename[i]='/';
     }
-    p = strrchr(filename, '\\');
+    p = strrchr(filename, '/');
 
     if (p) 
         *p='\0';
@@ -27415,7 +27415,7 @@ static char *js_default_module_normalize_name(JSContext *ctx,
                or ".." */
             if (filename[0] == '\0')
                 break;
-            p = strrchr(filename, '\\');
+            p = strrchr(filename, '/');
             if (!p)
                 p = filename;
             else
@@ -27431,12 +27431,12 @@ static char *js_default_module_normalize_name(JSContext *ctx,
         }
     }
     if (filename[0] != '\0')
-        strcat(filename, "\\");
+        strcat(filename, "/");
     strcat(filename, r);
     len = strlen(filename);
     for(i=0;i<len;i++){
-        if(filename[i]=='/')
-            filename[i]='\\';
+        if(filename[i]=='\\')
+            filename[i]='/';
     }
     //    printf("normalize: %s %s -> %s\n", base_name, name, filename);
     return filename;
