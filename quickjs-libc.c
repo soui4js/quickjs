@@ -1985,14 +1985,7 @@ static JSValue js_os_signal(JSContext *ctx, JSValueConst this_val,
     return JS_UNDEFINED;
 }
 
-#if defined(__linux__) || defined(__APPLE__)
-static int64_t get_time_ms(void)
-{
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (uint64_t)ts.tv_sec * 1000 + (ts.tv_nsec / 1000000);
-}
-#else
+
 //int gettimeofday(struct timeval* tp, struct timezone* tzp);
 /* more portable, but does not work if the date is updated */
 static int64_t get_time_ms(void)
@@ -2001,7 +1994,6 @@ static int64_t get_time_ms(void)
     gettimeofday(&tv, NULL);
     return (int64_t)tv.tv_sec * 1000 + (tv.tv_usec / 1000);
 }
-#endif
 
 static void unlink_timer(JSRuntime *rt, JSOSTimer *th)
 {
