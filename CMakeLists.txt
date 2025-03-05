@@ -1,6 +1,16 @@
 cmake_minimum_required(VERSION 3.10)
 
 project(libquickjs)
+set(CMAKE_CONFIGURATION_TYPES Debug Release)
+if(NOT CMAKE_BUILD_TYPE)
+set(CMAKE_BUILD_TYPE "Release")
+endif()
+
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -g -O0")
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O2")
+
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -s")
+set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -s")
 
 #set(CMAKE_MAKE_PROGRAM D:/msys64/usr/bin/make)
 #set(CMAKE_MAKE_PROGRAM /mingw32/bin/ninja.exe -j4)
