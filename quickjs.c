@@ -1855,8 +1855,8 @@ int JS_EnqueueJob2(JSContext *ctx, JSJobFunc *job_func,
     pthread_mutex_lock(&rt->mutex);    
     list_add_tail(&e->link, &rt->job_list);
     pthread_mutex_unlock(&rt->mutex);
-
-    SetEvent(rt->hWait);
+    
+    SetEvent(rt->hWait);//wakeup waiting proc.
     return 0;
 }
 

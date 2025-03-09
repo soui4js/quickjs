@@ -4063,35 +4063,29 @@ time_start:
         *waitTime = min_delay;
     }
     memset(handles, 0, sizeof(HANDLE)*length);
-    if (list_empty(&ts->os_rw_handlers) && list_empty(&ts->port_list))
-    {
-        handles[0] = JS_GetRuntimeWait(rt);
-        return 1; /* no more events */
-    }
+    int ret = 0;
+    handles[ret++] = JS_GetRuntimeWait(rt);
     list_for_each(el, &ts->os_rw_handlers) {
-        if (osrw_cnt > length)
+        if (ret >= length)
             break;
         rh = list_entry(el, JSOSRWHandler, link);
-        handles[osrw_cnt++] = (HANDLE)_get_osfhandle(rh->fd);
+        handles[ret++] = (HANDLE)_get_osfhandle(rh->fd);
+        osrw_cnt++;
     }
 
     list_for_each(el, &ts->port_list) {
         JSWorkerMessageHandler* port = list_entry(el, JSWorkerMessageHandler, link);
         if (!JS_IsNull(port->on_message_func)) {
             JSWorkerMessagePipe* ps = port->recv_pipe;
-            if (osrw_cnt + msg_cnt > length)
+            if(ret>=length) 
                 break;
-                #ifdef _WIN32
-            handles[osrw_cnt + msg_cnt++] = ps->hSemaphore;
-            #else
-            handles[osrw_cnt + msg_cnt++] = 0;
-            #endif
+            handles[ret++] = ps->hSemaphore;
+            msg_cnt++;
         }
     }
-    handles[osrw_cnt + msg_cnt] = JS_GetRuntimeWait(rt);
     if(rwsize) *rwsize = osrw_cnt;
     if (msgSize) *msgSize = msg_cnt;
-    return osrw_cnt + msg_cnt + 1;
+    return ret;
 }
 
 void js_handle_waitresult(JSContext* ctx, int ret, int osrw_cnt, int msg_cnt) {
@@ -4103,40 +4097,55 @@ void js_handle_waitresult(JSContext* ctx, int ret, int osrw_cnt, int msg_cnt) {
     if (ret == WAIT_TIMEOUT) {
         //wait timeout received.
         JS_ExecuteTimer(ctx);
-    }else if (ret >= (int)WAIT_OBJECT_0 && ret < (int)WAIT_OBJECT_0 + osrw_cnt + msg_cnt + 1) {
-        JSContext* ctx1 = NULL;
-        int err = 0;
-        JS_ExecutePendingJob(JS_GetRuntime(ctx), &ctx1);
-        if (err <= 0) {
-            if (err < 0) {
-                js_std_dump_error(ctx1);
+    }else{
+        ret -= WAIT_OBJECT_0;
+        if (ret == 0)
+        {//execute pending jobs.
+            if(s_printer) s_printer("execute pending jobs.",-1);
+            int err = 0;
+            for(;;) {
+                JSContext* ctx1 = NULL;
+                err = JS_ExecutePendingJob(JS_GetRuntime(ctx), &ctx1);
+                if (err < 0) {
+                    js_std_dump_error(ctx1);
+                }
+                if(err == 0) break;
+            }
+            return;
+        }
+        ret --;
+        if(ret>=0 && ret < osrw_cnt){
+            //call os.rwhandler
+            int idx = 0;
+            list_for_each(el, &ts->os_rw_handlers) {
+                rh = list_entry(el, JSOSRWHandler, link);
+                if (idx == ret && !JS_IsNull(rh->rw_func[0])) {
+                    call_handler(ctx, rh->rw_func[0]);
+                    /* must stop because the list may have been modified */
+                    return;
+                }
+                if (idx == ret && !JS_IsNull(rh->rw_func[1])) {
+                    call_handler(ctx, rh->rw_func[1]);
+                    /* must stop because the list may have been modified */
+                    return;
+                }
+                idx++;
             }
         }
-        int idx = 0;
-        list_for_each(el, &ts->os_rw_handlers) {
-            rh = list_entry(el, JSOSRWHandler, link);
-            if (idx == ret - WAIT_OBJECT_0 && !JS_IsNull(rh->rw_func[0])) {
-                call_handler(ctx, rh->rw_func[0]);
-                /* must stop because the list may have been modified */
-                return;
+        ret -= osrw_cnt;
+        if(ret >=0 && ret < msg_cnt){
+            //call msg.handler
+            int idx = 0;
+            list_for_each(el, &ts->port_list) {
+                JSWorkerMessageHandler* port = list_entry(el, JSWorkerMessageHandler, link);
+                if (idx == ret  && !JS_IsNull(port->on_message_func)) {
+                    handle_posted_message(rt, ctx, port);
+                    return;
+                }
+                idx++;
             }
-            if (idx == ret - WAIT_OBJECT_0 && !JS_IsNull(rh->rw_func[1])) {
-                call_handler(ctx, rh->rw_func[1]);
-                /* must stop because the list may have been modified */
-                return;
-            }
-            idx++;
         }
-        idx = 0;
-        list_for_each(el, &ts->port_list) {
-            JSWorkerMessageHandler* port = list_entry(el, JSWorkerMessageHandler, link);
-            if (idx == (ret - WAIT_OBJECT_0 - osrw_cnt) && !JS_IsNull(port->on_message_func)) {
-                handle_posted_message(rt, ctx, port);
-                return;
-            }
-            idx++;
-        }
-    }
+    } 
 }
 
 /* main loop which calls the user JS callbacks */
