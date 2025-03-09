@@ -59,7 +59,12 @@ endif()
 
 # build quickjs static library
 add_library(quickjs SHARED  ${SOURCES})
-target_link_libraries(quickjs pthread)
+if(CMAKE_SYSTEM_NAME MATCHES "Windows")
+target_link_libraries(quickjs -static -s pthread)
+else()
+target_link_libraries(quickjs  pthread)
+endif()
+
 target_compile_definitions(quickjs PRIVATE
     CONFIG_BIGNUM
     CONFIG_VERSION="${QJS_VERSION_STR}"
