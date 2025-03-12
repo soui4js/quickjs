@@ -86,6 +86,12 @@ QuickJS QQ群：**598609506**。
 *   在Javascript中实现的具有上下文着色和完成的命令行解释器。
 *   采用C包装库构建的内置标准库。
 
+#### 1.1.1 和原版的主要区别
+ 本仓库版本是setoutsoft修改后支持soui4js使用的版本，主要区别为：
+ * 为windows版本增加worker线程支持
+ * 为linux版本引用Swinx，实现使用windows版本相同的api。
+ * 增加两个API用于和有GUI的Windows程序集成消息循环。
+
 ### 1.2 基准测试
 
 点击查看[QuickJS基准测试](bench.md)具体内容
