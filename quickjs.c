@@ -13712,15 +13712,24 @@ static no_inline __exception int js_binary_logic_slow(JSContext *ctx,
     tag2 = JS_VALUE_GET_TAG(op2);
     if (tag1 == JS_TAG_BIG_INT || tag2 == JS_TAG_BIG_INT) {
         if (tag1 != tag2) {
-            JS_FreeValue(ctx, op1);
-            JS_FreeValue(ctx, op2);
-            JS_ThrowTypeError(ctx, "both operands must be bigint");
-            goto exception;
-        } else {
-        bigint_op:
-            if (ctx->rt->bigint_ops.binary_arith(ctx, op, sp - 2, op1, op2))
-                goto exception;
+            if(tag2 == JS_TAG_INT){
+                JS_ToInt32Free(ctx, (int32_t *)&v2, op2);
+                JS_FreeValue(ctx, op2);
+                op2 = JS_NewBigInt64(ctx,v2);
+            }else if(tag1==JS_TAG_INT){
+                JS_ToInt32Free(ctx, (int32_t *)&v1, op1);
+                JS_FreeValue(ctx, op1);
+                op1 = JS_NewBigInt64(ctx,v1); 
+            }else{
+                JS_FreeValue(ctx, op1);
+                JS_FreeValue(ctx, op2);
+                JS_ThrowTypeError(ctx, "both operands must be bigint or int");
+                goto exception;    
+            }
         }
+        bigint_op:
+        if (ctx->rt->bigint_ops.binary_arith(ctx, op, sp - 2, op1, op2))
+            goto exception;
     } else {
         if (unlikely(JS_ToInt32Free(ctx, (int32_t *)&v1, op1))) {
             JS_FreeValue(ctx, op2);
