@@ -13712,14 +13712,15 @@ static no_inline __exception int js_binary_logic_slow(JSContext *ctx,
     tag2 = JS_VALUE_GET_TAG(op2);
     if (tag1 == JS_TAG_BIG_INT || tag2 == JS_TAG_BIG_INT) {
         if (tag1 != tag2) {
-            if(tag2 == JS_TAG_INT){
-                JS_ToInt32Free(ctx, (int32_t *)&v2, op2);
+            int64_t v;
+            if(tag2 == JS_TAG_INT || tag2== JS_TAG_FLOAT64){
+                JS_ToBigInt64(ctx, &v, op2);
                 JS_FreeValue(ctx, op2);
-                op2 = JS_NewBigInt64(ctx,v2);
-            }else if(tag1==JS_TAG_INT){
-                JS_ToInt32Free(ctx, (int32_t *)&v1, op1);
+                op2 = JS_NewBigInt64(ctx,v);
+            }else if(tag1==JS_TAG_INT  || tag1== JS_TAG_FLOAT64){
+                JS_ToBigInt64(ctx, &v, op1);
                 JS_FreeValue(ctx, op1);
-                op1 = JS_NewBigInt64(ctx,v1); 
+                op1 = JS_NewBigInt64(ctx,v); 
             }else{
                 JS_FreeValue(ctx, op1);
                 JS_FreeValue(ctx, op2);
