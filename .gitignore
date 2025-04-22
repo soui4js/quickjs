@@ -23,3 +23,4 @@ test_fib.c
 .vscode/.cache/
 .vscode/compile_commands.json
 build
+build_rel
