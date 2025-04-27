@@ -120,9 +120,9 @@ int js_debugger_connect(JSContext *ctx, const char *address) {
 
     int client = socket(AF_INET, SOCK_STREAM, 0);
     assert(client > 0);
-
     ret = connect(client, (const struct sockaddr *)&addr, sizeof(addr));
-    assert(ret==0);
+    if(ret != 0)
+        return ret;
     struct js_transport_data *data = (struct js_transport_data *)malloc(sizeof(struct js_transport_data));
     memset(data, 0, sizeof(js_transport_data));
     data->handle = client;

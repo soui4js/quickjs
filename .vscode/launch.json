@@ -9,8 +9,8 @@
             "name": "Launch QuickJS",
             "type": "quickjs",
             "request": "launch",
-            "program": "${workspaceFolder}\\tests\\test_worker.js",
-            "runtimeExecutable": "${workspaceFolder}/build32/qjs.exe",
+            "program": "${workspaceFolder}/tests/test_worker.js",
+            "runtimeExecutable": "${workspaceFolder}/build/qjs",
             "address": "localhost",
             "port": 58585,
         },
@@ -18,7 +18,7 @@
             "name": "(gdb) Launch", // 启动配置的下拉菜单中显示的名称
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/qjs.exe", // 将要进行调试的程序的路径， workspaceFolder指当前工作目录（即vscode打开的目录：hello），main指的是makefile编译后目标码（可执行程序）的名字
+            "program": "${workspaceFolder}/build/qjs", // 将要进行调试的程序的路径， workspaceFolder指当前工作目录（即vscode打开的目录：hello），main指的是makefile编译后目标码（可执行程序）的名字
             "args": [
                 
             ], // 程序启动的参数
