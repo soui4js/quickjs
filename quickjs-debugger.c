@@ -384,7 +384,10 @@ static void js_process_request(JSDebuggerInfo *info, struct DebuggerSuspendedSta
 
 static void str_to_lower(char *str) {
   for (int i = 0; str[i]; i++) {
-    str[i] = tolower(str[i]);
+    if(str[i]=='\\')
+        str[i] ='/';
+    else
+        str[i] = tolower(str[i]);
   }
 }
 
