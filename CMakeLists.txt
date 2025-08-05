@@ -15,10 +15,16 @@ set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -s")
 #set(CMAKE_MAKE_PROGRAM D:/msys64/usr/bin/make)
 #set(CMAKE_MAKE_PROGRAM /mingw32/bin/ninja.exe -j4)
 set(CMAKE_CXX_COMPILE_FEATURES "${CMAKE_CXX_COMPILE_FEATURES} /MT /GR- /utf-8")
-#enable debug
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g -O0")
-#set output small size
-#set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Os")
+
+# 添加调试标志
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -g -O0")
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O2")
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -g -O0")
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -O2")
+if(CMAKE_SYSTEM_NAME MATCHES Linux)
+  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -s")
+  set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -s")
+endif()
 
 if (CMAKE_SYSTEM_NAME STREQUAL "MSYS")
     message(STATUS "Overriding incorrect Linux detection for MSYS")
@@ -116,3 +122,18 @@ target_compile_definitions(qjs PRIVATE
     CONFIG_VERSION="${QJS_VERSION_STR}"
 )
 add_dependencies(qjs gen_repl_calc)
+
+
+install(FILES quickjs.h quickjs-libc.h DESTINATION include)
+install(TARGETS quickjs qjs qjsc
+    CONFIGURATIONS Release
+    RUNTIME DESTINATION bin/Release
+    LIBRARY DESTINATION lib/Release
+    ARCHIVE DESTINATION lib/Release
+)
+install(TARGETS quickjs qjs qjsc
+    CONFIGURATIONS Debug
+    RUNTIME DESTINATION bin/Debug
+    LIBRARY DESTINATION lib/Debug
+    ARCHIVE DESTINATION lib/Debug
+)

@@ -25,3 +25,5 @@ test_fib.c
 build_rel
 build
 .vs/
+x32
+x64
