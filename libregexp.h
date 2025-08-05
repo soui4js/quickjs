@@ -25,10 +25,10 @@
 #define LIBREGEXP_H
 
 #include <stddef.h>
-
+#include "cutils.h"
 #include "libunicode.h"
 
-#define LRE_BOOL  int       /* for documentation purposes */
+#define LRE_BOOL  BOOL       /* for documentation purposes */
 
 #define LRE_FLAG_GLOBAL     (1 << 0)
 #define LRE_FLAG_IGNORECASE (1 << 1)

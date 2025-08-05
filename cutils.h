@@ -25,6 +25,7 @@
 #ifndef CUTILS_H
 #define CUTILS_H
 
+#include <windows.h>
 #include <stdlib.h>
 #include <inttypes.h>
 
@@ -49,14 +50,6 @@
 #define countof(x) (sizeof(x) / sizeof((x)[0]))
 #endif
 
-typedef int BOOL;
-
-#ifndef FALSE
-enum {
-    FALSE = 0,
-    TRUE = 1,
-};
-#endif
 
 void pstrcpy(char *buf, int buf_size, const char *str);
 char *pstrcat(char *buf, int buf_size, const char *s);

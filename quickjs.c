@@ -15416,7 +15416,7 @@ static JSValue JS_GetIterator(JSContext *ctx, JSValueConst obj, BOOL is_async)
 /* return *pdone = 2 if the iterator object is not parsed */
 static JSValue JS_IteratorNext2(JSContext *ctx, JSValueConst enum_obj,
                                 JSValueConst method,
-                                int argc, JSValueConst *argv, int *pdone)
+                                int argc, JSValueConst *argv, BOOL *pdone)
 {
     JSValue obj;
 
@@ -15459,7 +15459,7 @@ static JSValue JS_IteratorNext(JSContext *ctx, JSValueConst enum_obj,
                                int argc, JSValueConst *argv, BOOL *pdone)
 {
     JSValue obj, value, done_val;
-    int done;
+    BOOL done;
 
     obj = JS_IteratorNext2(ctx, enum_obj, method, argc, argv, &done);
     if (JS_IsException(obj))
@@ -15550,7 +15550,7 @@ static __exception int js_for_of_start(JSContext *ctx, JSValue *sp,
 static __exception int js_for_of_next(JSContext *ctx, JSValue *sp, int offset)
 {
     JSValue value = JS_UNDEFINED;
-    int done = 1;
+    BOOL done = TRUE;
 
     if (likely(!JS_IsUndefined(sp[offset]))) {
         value = JS_IteratorNext(ctx, sp[offset], sp[offset + 1], 0, NULL, &done);
@@ -16245,7 +16245,7 @@ static JSValue js_call_c_function(JSContext *ctx, JSValueConst func_obj,
         break;
     case JS_CFUNC_iterator_next:
         {
-            int done;
+            BOOL done;
             ret_val = func.iterator_next(ctx, this_obj, argc, arg_buf,
                                          &done, p->u.cfunc.magic);
             if (!JS_IsException(ret_val) && done != 2) {
@@ -38215,7 +38215,7 @@ static JSValue js_array_from(JSContext *ctx, JSValueConst this_val,
     JSValue stack[2];
     JSValue iter, r, v, v2, arrayLike;
     int64_t k, len;
-    int done, mapping;
+    BOOL done, mapping;
 
     mapping = FALSE;
     mapfn = JS_UNDEFINED;
@@ -47511,7 +47511,7 @@ static JSValue js_async_from_sync_iterator_next(JSContext *ctx, JSValueConst thi
 {
     JSValue promise, resolving_funcs[2], value, err, method;
     JSAsyncFromSyncIteratorData *s;
-    int done;
+    BOOL done;
     int is_reject;
 
     promise = JS_NewPromiseCapability(ctx, resolving_funcs);
@@ -51957,7 +51957,7 @@ static JSValue js_typed_array_from(JSContext *ctx, JSValueConst this_val,
     JSValue stack[2];
     JSValue iter, arr, r, v, v2;
     int64_t k, len;
-    int done, mapping;
+    BOOL done, mapping;
 
     mapping = FALSE;
     mapfn = JS_UNDEFINED;

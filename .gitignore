@@ -1,4 +1,4 @@
-.obj/
+.obj
 qjsc
 repl.c
 qjs-debug
@@ -27,3 +27,4 @@ build
 .vs/
 x32
 x64
+.cache
