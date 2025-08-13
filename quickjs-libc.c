@@ -558,8 +558,22 @@ JSModuleDef *js_module_loader(JSContext *ctx,
 {
     JSModuleDef *m;
 
-    if (has_suffix(module_name, ".so") || has_suffix(module_name, ".dll")) {
+    if (has_suffix(module_name, ".so") || has_suffix(module_name, ".dll") || has_suffix(module_name, ".dylib")) {
+        int len = strlen(module_name);
+
+        char *module_name_copy = (char*)malloc(len+10);
+        strcpy(module_name_copy, module_name);
+        char *p = strrchr(module_name_copy, '.');
+        assert(p);
+        #ifdef _WIN32
+        strcpy(p, ".dll");
+        #elif defined(__APPLE__)
+        strcpy(p, ".dylib");
+        #else
+        strcpy(p,".so");
+        #endif
         m = js_module_loader_so(ctx, module_name);
+        free(module_name_copy);
     } else {
         size_t buf_len;
         uint8_t *buf;
