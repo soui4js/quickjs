@@ -28,3 +28,5 @@ build
 x32
 x64
 .cache
+build_x32
+build_x64

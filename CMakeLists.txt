@@ -82,6 +82,11 @@ set_target_properties(quickjs PROPERTIES
     C_STANDARD_REQUIRED ON
 )
 
+# Fix for MSYS2: Prevent automatic prefix addition to DLL name
+if (CMAKE_SYSTEM_NAME STREQUAL "MSYS")
+    set_target_properties(quickjs PROPERTIES PREFIX "lib")
+endif()
+
 if (CMAKE_SYSTEM_NAME MATCHES Windows)
 target_link_libraries(quickjs ws2_32)
 else()
